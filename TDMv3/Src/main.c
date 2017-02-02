@@ -58,6 +58,22 @@ static void MX_USART6_UART_Init(void);
 
 /* USER CODE BEGIN 0 */
 
+typedef enum
+{
+  StateOff = 0,
+  StateOn
+} StateOnOff;
+
+static void setLed1(StateOnOff state)
+{
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, (GPIO_PinState)state);
+}
+
+static void setBlePwr(StateOnOff state)
+{
+	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, (GPIO_PinState)state);
+}
+
 /* USER CODE END 0 */
 
 int main(void)
@@ -80,7 +96,8 @@ int main(void)
   MX_USART6_UART_Init();
 
   /* USER CODE BEGIN 2 */
-
+  setLed1(StateOn);
+  setBlePwr(StateOn);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -155,13 +172,42 @@ static void MX_USART6_UART_Init(void)
 
 }
 
-/** Pinout Configuration
+/** Configure pins as 
+        * Analog 
+        * Input 
+        * Output
+        * EVENT_OUT
+        * EXTI
 */
 static void MX_GPIO_Init(void)
 {
 
+  GPIO_InitTypeDef GPIO_InitStruct;
+
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOE_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOG_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PE3 */
+  GPIO_InitStruct.Pin = GPIO_PIN_3;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PB15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_15;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 }
 

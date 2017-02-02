@@ -15,7 +15,7 @@
         <TargetCommonOption>
           <Device>STM32L052K6</Device>
           <Vendor>STMicroelectronics</Vendor>
-          <PackID>Keil.STM32L0xx_DFP.1.4.0</PackID>
+          <PackID>Keil.STM32L0xx_DFP.1.6.0</PackID>
           <PackURL>http://www.keil.com/pack/</PackURL>
           <Cpu>IRAM(0x20000000-0x20001FFF) IROM(0x8000000-0x8007FFF) CLOCK(8000000) CPUTYPE("Cortex-M0+")</Cpu>
           <FlashUtilSpec></FlashUtilSpec>
@@ -328,6 +328,9 @@
             <v6LangP>1</v6LangP>
             <vShortEn>1</vShortEn>
             <vShortWch>1</vShortWch>
+            <v6Lto>0</v6Lto>
+            <v6WtE>0</v6WtE>
+            <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls>--C99</MiscControls>
               <Define>USE_HAL_DRIVER,STM32L052xx</Define>
@@ -345,6 +348,7 @@
             <NoWarn>0</NoWarn>
             <uSurpInc>0</uSurpInc>
             <useXO>0</useXO>
+            <uClangAs>0</uClangAs>
             <VariousControls>
               <MiscControls></MiscControls>
               <Define></Define>
