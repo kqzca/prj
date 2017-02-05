@@ -47,8 +47,8 @@ static const uint16_t BUFSIZE = 20;
 static const uint16_t TIMEOUT = 2000;
 static uint8_t rxBuf[BUFSIZE];
 static uint8_t txBuf[BUFSIZE];
-static uint8_t data[BUFSIZE];
-static uint32_t counter = 0;
+static uint8_t data[BUFSIZE] = {0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9};
+static uint16_t counter = 0;
 
 /* USER CODE END PV */
 
@@ -105,6 +105,8 @@ int main(void)
   /* USER CODE BEGIN 2 */
   setLed1(StateOn);
   setBlePwr(StateOn);
+  memset(txBuf, 0, BUFSIZE);
+  memset(rxBuf, 0, BUFSIZE);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -114,13 +116,14 @@ int main(void)
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
-    memcpy(txBuf, data, 16);
-    *((uint32_t *)(txBuf + 16)) = counter++;
-    HAL_StatusTypeDef sts = HAL_UART_Transmit(&huart6, (uint8_t*)txBuf, BUFSIZ, TIMEOUT);
+    HAL_Delay(TIMEOUT);
+    memcpy(txBuf + 2, data + 2, 18);
+    *((uint16_t *)txBuf) = counter++;
+    HAL_StatusTypeDef sts = HAL_UART_Transmit(&huart6, (uint8_t*)txBuf, BUFSIZE, TIMEOUT);
     sts = HAL_UART_Receive(&huart6, (uint8_t *)rxBuf, BUFSIZE, TIMEOUT);
     if(sts == HAL_OK)
     {
-      memcpy(data, rxBuf, 16);
+      memcpy(data, rxBuf, 20);
     }
   }
   /* USER CODE END 3 */
