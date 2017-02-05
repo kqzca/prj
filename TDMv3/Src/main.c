@@ -32,6 +32,7 @@
   */
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
+#include <string.h>
 
 /* USER CODE BEGIN Includes */
 
@@ -42,6 +43,12 @@ UART_HandleTypeDef huart6;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
+static const uint16_t BUFSIZE = 20;
+static const uint16_t TIMEOUT = 2000;
+static uint8_t rxBuf[BUFSIZE];
+static uint8_t txBuf[BUFSIZE];
+static uint8_t data[BUFSIZE];
+static uint32_t counter = 0;
 
 /* USER CODE END PV */
 
@@ -71,7 +78,7 @@ static void setLed1(StateOnOff state)
 
 static void setBlePwr(StateOnOff state)
 {
-	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, (GPIO_PinState)state);
+	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, (state == StateOn) ? GPIO_PIN_RESET : GPIO_PIN_SET);
 }
 
 /* USER CODE END 0 */
@@ -107,7 +114,14 @@ int main(void)
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
-
+    memcpy(txBuf, data, 16);
+    *((uint32_t *)(txBuf + 16)) = counter++;
+    HAL_StatusTypeDef sts = HAL_UART_Transmit(&huart6, (uint8_t*)txBuf, BUFSIZ, TIMEOUT);
+    sts = HAL_UART_Receive(&huart6, (uint8_t *)rxBuf, BUFSIZE, TIMEOUT);
+    if(sts == HAL_OK)
+    {
+      memcpy(data, rxBuf, 16);
+    }
   }
   /* USER CODE END 3 */
 
