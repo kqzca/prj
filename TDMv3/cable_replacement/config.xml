@@ -3,4 +3,5 @@
 <config>
     <manual_confirm />
     <throughput optimize="performance" />
+	<user_data size="0x800" />
 </config>
