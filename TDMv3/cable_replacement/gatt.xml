@@ -2,13 +2,67 @@
 <configuration>
 
     <service uuid="1800">
-      <description>Generic Access Profile</description>
-      <characteristic uuid="2a00">
-        <properties read="true" const="true" />
-        <value>Bluegiga CR Demo</value>
-      </characteristic>
+		<description>Generic Access Profile</description>
+		<characteristic uuid="2a00">
+			<properties read="true" const="true" />
+			<value>Bluegiga CR</value>
+		</characteristic>
     </service>
     
+    <service uuid="180A" id="device_information">
+        <description>Device Information</description>
+        <characteristic uuid="2A29" id="c_manufacturer_name">
+            <description>Manufacturer Name</description>
+            <properties read="true" const="true" />
+            <value>Sober Steering</value>
+        </characteristic>
+
+        <characteristic uuid="2A24" id="c_model_number">
+            <description>Model Number</description>
+            <properties read="true" const="true" />
+            <value>TDMv3</value>
+        </characteristic>
+        
+        <characteristic uuid="2A25" id="c_serial_number">
+            <description>Serial Number</description>
+            <properties read="true" const="true" />
+            <value>123456789</value>
+        </characteristic>
+        
+        <characteristic uuid="2A27" id="c_hardware_revision_string">
+            <description>Hardware Revision String</description>
+            <properties read="true" const="true" />
+            <value>H1.0.0</value>
+        </characteristic>
+        
+        <characteristic uuid="2A26" id="c_firmware_revision_string">
+            <description>Firmware Revision String</description>
+            <properties read="true" const="true" />
+            <value>F1.0.0</value>
+        </characteristic>
+        
+        <characteristic uuid="2A28" id="c_software_revision_string">
+            <description>Software Revision String</description>
+            <properties read="true" const="true" />
+            <value>S1.0.0</value>
+        </characteristic>
+        
+        <characteristic uuid="2AC3" id="c_object_id">
+            <description>Object ID</description>
+            <properties read="true" write="true" />
+            <value type="hex">112233</value>
+        </characteristic>
+    </service>
+		
+    <service uuid="00000001-0001-0001-0001-000000000001" advertise="true">
+        <description>TDM Config</description>
+		<characteristic uuid="00000002-0002-0002-0002-000000000002" id="c_bus_id">
+			<description>Bus ID</description>
+			<properties read="true" write="true"/>
+			<value type="hex" variable_length="true" length="20">1234</value>
+		</characteristic>
+    </service>
+
     <service uuid="0bd51666-e7cb-469b-8e4d-2742f1ba77cc" advertise="true">
         <description>Cable replacement service</description>
         <characteristic uuid="e7add780-b042-4876-aae1-112855353cc1" id="xgatt_data">
@@ -17,5 +71,4 @@
             <value variable_length="true" length="20" type="user" />
         </characteristic>
     </service>
-    
 </configuration>
