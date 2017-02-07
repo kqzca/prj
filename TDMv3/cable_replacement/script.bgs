@@ -7,19 +7,32 @@ dim in_len
 dim out(20) # endpoint data out
 dim out_len
 
+dim bus_id(20)
+dim bus_id_len
+dim read_len
+
 event system_boot(major, minor, patch, build, ll_version, protocol_version, hw)
 	connected = 0
     call system_endpoint_set_watermarks(5, 0, 0) # disable watermarks
 	call gap_set_adv_parameters(32, 48, 7)
     call gap_set_mode(gap_general_discoverable, gap_undirected_connectable)
+	
+    call flash_read_data(0, 1)(read_len, bus_id_len)
+	if bus_id_len > 0 && bus_id_len < 20
+		call flash_read_data(1, bus_id_len)(read_len, bus_id(0:bus_id_len))
+	else
+		bus_id(0:4) = "1234"
+		bus_id_len = 4
+		call flash_write_data(0, 1, bus_id_len)
+		call flash_write_data(1, bus_id_len, bus_id(0:bus_id_len))
+	end if
+	call attributes_write(c_bus_id, 0, bus_id_len, bus_id(0:bus_id_len))
 end
 
 event attributes_status(handle, flags)
     if handle = xgatt_data then
         if flags & 2 then
             call system_endpoint_set_watermarks(5, 1, $ff) # set RX watermark
-        
-            # TODO: Resend endpoint data in when indications are enabled
         else
             call system_endpoint_set_watermarks(5, 0, $ff) # disable RX watermark
         end if
@@ -51,6 +64,18 @@ event attributes_value(connection, reason, handle, offset, value_len, value_data
         out(0:value_len) = value_data(0:value_len)
         out_len = value_len
         call system_endpoint_set_watermarks(5, $ff, out_len) # set TX watermark
+    end if
+	
+    if handle = c_bus_id then
+		if value_len < 20
+			bus_id_len = value_len
+			bus_id(0:bus_id_len) = value_data(0:value_len)
+			call flash_erase_page(0)
+			call flash_write_data(0, 1, bus_id_len)
+			call flash_write_data(1, bus_id_len, bus_id(0:bus_id_len))
+		else
+			call attributes_write(c_bus_id, 0, bus_id_len, bus_id(0:bus_id_len))
+		end if
     end if
 end
 
