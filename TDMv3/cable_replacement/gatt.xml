@@ -3,9 +3,9 @@
 
     <service uuid="1800">
 		<description>Generic Access Profile</description>
-		<characteristic uuid="2a00">
-			<properties read="true" const="true" />
-			<value>Bluegiga CR</value>
+		<characteristic uuid="2a00" id="xgatt_name">
+			<properties read="true" write="true"/>
+			<value variable_length="true">01020304050607</value>
 		</characteristic>
     </service>
     
@@ -54,15 +54,6 @@
         </characteristic>
     </service>
 		
-    <service uuid="00000001-0001-0001-0001-000000000001" advertise="true">
-        <description>TDM Config</description>
-		<characteristic uuid="00000002-0002-0002-0002-000000000002" id="c_bus_id">
-			<description>Bus ID</description>
-			<properties read="true" write="true"/>
-			<value type="hex" variable_length="true" length="20">1234</value>
-		</characteristic>
-    </service>
-
     <service uuid="0bd51666-e7cb-469b-8e4d-2742f1ba77cc" advertise="true">
         <description>Cable replacement service</description>
         <characteristic uuid="e7add780-b042-4876-aae1-112855353cc1" id="xgatt_data">
