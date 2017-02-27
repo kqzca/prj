@@ -32,23 +32,27 @@
   */
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
-#include <string.h>
 
 /* USER CODE BEGIN Includes */
+#include "main.h"
+#include <string.h>
 
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
+I2C_HandleTypeDef hi2c1;
+
 UART_HandleTypeDef huart6;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
 static const uint16_t BUFSIZE = 20;
-static const uint16_t TIMEOUT = 2000;
+static const uint16_t TIMEOUT = 500;
+static const uint8_t scanIntervalMs = 10;
 static uint8_t rxBuf[BUFSIZE];
 static uint8_t txBuf[BUFSIZE];
 static uint8_t data[BUFSIZE] = {0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9};
-static uint16_t counter = 0;
+static uint16_t counterBT = 0, timerBT = 0;
 
 /* USER CODE END PV */
 
@@ -57,6 +61,7 @@ void SystemClock_Config(void);
 void Error_Handler(void);
 static void MX_GPIO_Init(void);
 static void MX_USART6_UART_Init(void);
+static void MX_I2C1_Init(void);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
@@ -71,9 +76,20 @@ typedef enum
   StateOn
 } StateOnOff;
 
-static void setLed1(StateOnOff state)
+static void setLed(uint8_t ledIdx, StateOnOff state)
 {
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, (GPIO_PinState)state);
+  switch (ledIdx)
+  {
+    case 1:
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, (GPIO_PinState)state);
+    break;
+    case 2:
+      HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8,  (GPIO_PinState)state);
+    break;
+    case 3:
+      HAL_GPIO_WritePin(GPIOD, GPIO_PIN_9,  (GPIO_PinState)state);
+    break;
+  }
 }
 
 static void setBlePwr(StateOnOff state)
@@ -101,9 +117,10 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART6_UART_Init();
+  MX_I2C1_Init();
 
   /* USER CODE BEGIN 2 */
-  setLed1(StateOn);
+  setLed(1, StateOn);
   setBlePwr(StateOn);
   memset(txBuf, 0, BUFSIZE);
   memset(rxBuf, 0, BUFSIZE);
@@ -111,19 +128,47 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  LIS3DSH_Detect();
+  LIS3DSH_Init(LIS3DSH_Sensitivity_2G, LIS3DSH_Filter_800Hz);
+  l3g_init();
+  l3g_enableDefault();
+  uint32_t oldTick = 0;
+  uint8_t led2State = StateOn;
+  SNR_DATA_t dataBlock;
   while (1)
   {
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
-    HAL_Delay(TIMEOUT);
-    memcpy(txBuf + 2, data + 2, 18);
-    *((uint16_t *)txBuf) = counter++;
-    HAL_StatusTypeDef sts = HAL_UART_Transmit(&huart6, (uint8_t*)txBuf, BUFSIZE, TIMEOUT);
-    sts = HAL_UART_Receive(&huart6, (uint8_t *)rxBuf, BUFSIZE, TIMEOUT);
-    if(sts == HAL_OK)
+    uint32_t newTick = HAL_GetTick();
+    if (newTick - oldTick < scanIntervalMs)
     {
-      memcpy(data, rxBuf, 20);
+      continue;
+    }
+    
+    oldTick = newTick;
+    timerBT++;
+    
+    LIS3DSH_ReadAxes(&(dataBlock.dataLIS3DSH));
+    l3g_read(&(dataBlock.dataL3GD20H));
+    
+    if ((dataBlock.dataLIS3DSH.X == 0 && dataBlock.dataLIS3DSH.Y == 0 && dataBlock.dataLIS3DSH.Z == 0) ||
+        (dataBlock.dataL3GD20H.x == 0 && dataBlock.dataL3GD20H.y == 0 && dataBlock.dataL3GD20H.z == 0))
+      Error_Handler();
+    
+    if (TIMEOUT <= timerBT * scanIntervalMs)
+    {
+      timerBT = 0;
+      setLed(2, led2State);
+      led2State = !led2State;
+      memcpy(txBuf + 2, data + 2, 18);
+      *((uint16_t *)txBuf) = counterBT++;
+      HAL_StatusTypeDef sts = HAL_UART_Transmit(&huart6, (uint8_t*)txBuf, BUFSIZE, TIMEOUT);
+      sts = HAL_UART_Receive(&huart6, (uint8_t *)rxBuf, BUFSIZE, TIMEOUT);
+      if(sts == HAL_OK)
+      {
+        memcpy(data, rxBuf, 20);
+      }
     }
   }
   /* USER CODE END 3 */
@@ -170,6 +215,26 @@ void SystemClock_Config(void)
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 }
 
+/* I2C1 init function */
+static void MX_I2C1_Init(void)
+{
+
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.ClockSpeed = 100000;
+  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+}
+
 /* USART6 init function */
 static void MX_USART6_UART_Init(void)
 {
@@ -204,6 +269,7 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOG_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
@@ -211,6 +277,9 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8|GPIO_PIN_9, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : PE3 */
   GPIO_InitStruct.Pin = GPIO_PIN_3;
@@ -225,6 +294,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PD8 PD9 */
+  GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
 }
 
