@@ -57,7 +57,7 @@ static uint8_t rxBuf[BUFSIZE];
 static uint8_t txBuf[BUFSIZE];
 static uint8_t data[BUFSIZE] = {0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9};
 static uint16_t counterBT = 0, timerBT = 0;
-uint8_t txOverUsbUart = 1;
+uint8_t txBleUart = 1;
 
 /* USER CODE END PV */
 
@@ -184,18 +184,21 @@ int main(void)
       led2State = !led2State;
       memcpy(txBuf + 2, data + 2, 18);
       *((uint16_t *)txBuf) = counterBT++;
-      HAL_StatusTypeDef sts = HAL_UART_Transmit(&huart6, (uint8_t*)txBuf, BUFSIZE, TIMEOUT);
-      if (txOverUsbUart)
+      if (txBleUart)
+        HAL_UART_Transmit(&huart6, (uint8_t*)txBuf, BUFSIZE, TIMEOUT);
+      
+      int i=0;
+      memset(usbComOutBuf, 0, USB_COM_BUFSIZE);
+      while (i<rxBufIdx)
       {
-        memset(usbComOutBuf, 0, USB_COM_BUFSIZE);
-        int i=0;
-        while (i<rxBufIdx)
-        {
-          sprintf((char *)usbComOutBuf, "%3d %02X %c\r\n", rxBuf[i], rxBuf[i], rxBuf[i]);
-          CDC_Transmit_FS(usbComOutBuf, strlen((char *)usbComOutBuf));
-          i++;
-        }
-        rxBufIdx = 0;
+        sprintf((char *)usbComOutBuf + i*5, "0x%02X ", rxBuf[i]);
+        i++;
+      }
+      rxBufIdx = 0;
+      if (i > 0)
+      {
+        sprintf((char *)usbComOutBuf + i*5, "---\n");
+        CDC_Transmit_FS(usbComOutBuf, strlen((char *)usbComOutBuf));
       }
     }
   }
@@ -365,18 +368,32 @@ void checkUsbComBuf(void)
 {
 	uint8_t rxMsg[RXCHRBUFSIZE];
   uint8_t addrCmd[8] = {0x00, 0x04, 0x09, 0x01, 0x00, 0x10, 0x00, 0x00};
-  uint8_t dfuCmd[5]  = {0x00, 0x01, 0x09, 0x00, 0x01};
+  uint8_t dfuResetCmd[5]  = {0x00, 0x01, 0x09, 0x00, 0x01};
+  uint8_t sysResetCmd[5]  = {0x00, 0x01, 0x00, 0x00, 0x01};
 	if (getMsg(rxMsg, RXCHRBUFSIZE) > 0)
 	{
 		switch (rxMsg[0])
 		{
 			case 'p':
 			case 'P':
-				txOverUsbUart = 0;
+				txBleUart = 0;
 				break;
 			case 't':
 			case 'T':
-				txOverUsbUart = 1;
+				txBleUart = 1;
+				break;
+			case 'r':
+			case 'R':
+				memset(usbComOutBuf, 0, USB_COM_BUFSIZE);
+				sprintf((char *)usbComOutBuf, "BLE Reset.\n");
+				CDC_Transmit_FS(usbComOutBuf, strlen((char *)usbComOutBuf));
+        setLed(1, StateOff);
+        setBlePwr(StateOff);
+        HAL_Delay(500);
+        setLed(1, StateOn);
+        setBlePwr(StateOn);
+        HAL_Delay(500);
+        HAL_UART_Transmit(&huart6, addrCmd, 8, TIMEOUT);
 				break;
 			case 'h':
 			case 'H':
@@ -390,7 +407,6 @@ void checkUsbComBuf(void)
 				memset(usbComOutBuf, 0, USB_COM_BUFSIZE);
 				sprintf((char *)usbComOutBuf, "BLE P0_0 Low.\n");
 				CDC_Transmit_FS(usbComOutBuf, strlen((char *)usbComOutBuf));
-        setBleWake(GPIO_PIN_SET);
         setBleWake(GPIO_PIN_RESET);
 				break;
 			case 'a':
@@ -405,7 +421,7 @@ void checkUsbComBuf(void)
 				memset(usbComOutBuf, 0, USB_COM_BUFSIZE);
 				sprintf((char *)usbComOutBuf, "BLE DFU Command.\n");
 				CDC_Transmit_FS(usbComOutBuf, strlen((char *)usbComOutBuf));
-        HAL_UART_Transmit(&huart6, dfuCmd, 5, TIMEOUT);
+        HAL_UART_Transmit(&huart6, dfuResetCmd, 5, TIMEOUT);
 				break;
 			default:
 				memset(usbComOutBuf, 0, USB_COM_BUFSIZE);
