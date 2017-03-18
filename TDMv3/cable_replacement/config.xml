@@ -3,6 +3,7 @@
 <config>
     <manual_confirm />
     <throughput optimize="performance" />
-	<user_data size="0x800" />
-	<dfu enable="true" />
+    <user_data size="0x800" />
+    <script force="true" />
+    <dfu enable="true" />
 </config>
