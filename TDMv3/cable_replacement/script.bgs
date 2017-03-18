@@ -33,6 +33,11 @@ event system_boot(major, minor, patch, build, ll_version, protocol_version, hw)
 	call attributes_write(xgatt_name, 0, device_name(0:1), device_name(1:device_name(0:1)))
 	call gap_set_adv_parameters(32, 48, 7)
     call gap_set_mode(gap_general_discoverable, gap_undirected_connectable)
+	
+    # enable interrupt on P0_0 rising edge
+    # (parameters are port=0, bitmask=0b00000001, edge=rising)    
+    call hardware_io_port_irq_enable(0, 1)(result)
+    call hardware_io_port_irq_direction(0, 0)(result)
 end
 
 event attributes_status(handle, flags)
@@ -98,4 +103,14 @@ event connection_disconnected(connection, reason)
     call system_endpoint_set_watermarks(5, 0, 0) # disable watermarks
     call gap_set_adv_parameters(32, 48, 7)
     call gap_set_mode(gap_general_discoverable, gap_undirected_connectable)
+end
+
+# catch P0_0 (active HIGH configuration, hardware.xml pulls it low)
+event hardware_io_port_status(delta, port, irq, state)
+    if port = 0 then
+        if (irq & 1) = 1 then
+            # P0_0 is HIGH and the source of this interrupt
+            call system_reset(1)
+        end if
+    end if
 end
