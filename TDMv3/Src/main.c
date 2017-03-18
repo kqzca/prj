@@ -32,8 +32,10 @@
   */
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
+#include "usb_device.h"
 
 /* USER CODE BEGIN Includes */
+#include "usbd_cdc_if.h"
 #include "main.h"
 #include <string.h>
 
@@ -43,16 +45,19 @@
 I2C_HandleTypeDef hi2c1;
 
 UART_HandleTypeDef huart6;
+DMA_HandleTypeDef hdma_usart6_rx;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
 static const uint16_t BUFSIZE = 20;
 static const uint16_t TIMEOUT = 500;
 static const uint8_t scanIntervalMs = 10;
+static uint8_t rxByte = 0, rxBufIdx = 0;
 static uint8_t rxBuf[BUFSIZE];
 static uint8_t txBuf[BUFSIZE];
 static uint8_t data[BUFSIZE] = {0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9};
 static uint16_t counterBT = 0, timerBT = 0;
+uint8_t txOverUsbUart = 1;
 
 /* USER CODE END PV */
 
@@ -60,11 +65,15 @@ static uint16_t counterBT = 0, timerBT = 0;
 void SystemClock_Config(void);
 void Error_Handler(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_USART6_UART_Init(void);
 static void MX_I2C1_Init(void);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
+void checkUsbComBuf(void);
+#define USB_COM_BUFSIZE 128
+uint8_t usbComOutBuf[USB_COM_BUFSIZE];
 
 /* USER CODE END PFP */
 
@@ -97,6 +106,11 @@ static void setBlePwr(StateOnOff state)
 	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, (state == StateOn) ? GPIO_PIN_RESET : GPIO_PIN_SET);
 }
 
+static void setBleWake(GPIO_PinState state)
+{
+	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_6, state);
+}
+
 /* USER CODE END 0 */
 
 int main(void)
@@ -116,8 +130,10 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USART6_UART_Init();
   MX_I2C1_Init();
+  MX_USB_DEVICE_Init();
 
   /* USER CODE BEGIN 2 */
   setLed(1, StateOn);
@@ -135,6 +151,9 @@ int main(void)
   uint32_t oldTick = 0;
   uint8_t led2State = StateOn;
   SNR_DATA_t dataBlock;
+  
+  HAL_UART_Receive_DMA(&huart6, &rxByte, 1);
+
   while (1)
   {
   /* USER CODE END WHILE */
@@ -145,6 +164,8 @@ int main(void)
     {
       continue;
     }
+    
+    checkUsbComBuf();
     
     oldTick = newTick;
     timerBT++;
@@ -164,10 +185,17 @@ int main(void)
       memcpy(txBuf + 2, data + 2, 18);
       *((uint16_t *)txBuf) = counterBT++;
       HAL_StatusTypeDef sts = HAL_UART_Transmit(&huart6, (uint8_t*)txBuf, BUFSIZE, TIMEOUT);
-      sts = HAL_UART_Receive(&huart6, (uint8_t *)rxBuf, BUFSIZE, TIMEOUT);
-      if(sts == HAL_OK)
+      if (txOverUsbUart)
       {
-        memcpy(data, rxBuf, 20);
+        memset(usbComOutBuf, 0, USB_COM_BUFSIZE);
+        int i=0;
+        while (i<rxBufIdx)
+        {
+          sprintf((char *)usbComOutBuf, "%3d %02X %c\r\n", rxBuf[i], rxBuf[i], rxBuf[i]);
+          CDC_Transmit_FS(usbComOutBuf, strlen((char *)usbComOutBuf));
+          i++;
+        }
+        rxBufIdx = 0;
       }
     }
   }
@@ -187,10 +215,14 @@ void SystemClock_Config(void)
 
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = 16;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 4;
+  RCC_OscInitStruct.PLL.PLLN = 168;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = 7;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -198,11 +230,11 @@ void SystemClock_Config(void)
 
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
   {
     Error_Handler();
   }
@@ -246,11 +278,26 @@ static void MX_USART6_UART_Init(void)
   huart6.Init.Parity = UART_PARITY_NONE;
   huart6.Init.Mode = UART_MODE_TX_RX;
   huart6.Init.HwFlowCtl = UART_HWCONTROL_RTS_CTS;
-  huart6.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart6.Init.OverSampling = UART_OVERSAMPLING_8;
   if (HAL_UART_Init(&huart6) != HAL_OK)
   {
     Error_Handler();
   }
+
+}
+
+/** 
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void) 
+{
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA2_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA2_Stream1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream1_IRQn);
 
 }
 
@@ -268,12 +315,14 @@ static void MX_GPIO_Init(void)
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOE_CLK_ENABLE();
+  __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOG_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3|GPIO_PIN_6, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
@@ -281,11 +330,17 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8|GPIO_PIN_9, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PE3 */
-  GPIO_InitStruct.Pin = GPIO_PIN_3;
+  /*Configure GPIO pins : PE3 PE6 */
+  GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_6;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PE5 */
+  GPIO_InitStruct.Pin = GPIO_PIN_5;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PB15 */
@@ -306,6 +361,66 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+void checkUsbComBuf(void)
+{
+	uint8_t rxMsg[RXCHRBUFSIZE];
+  uint8_t addrCmd[8] = {0x00, 0x04, 0x09, 0x01, 0x00, 0x10, 0x00, 0x00};
+  uint8_t dfuCmd[5]  = {0x00, 0x01, 0x09, 0x00, 0x01};
+	if (getMsg(rxMsg, RXCHRBUFSIZE) > 0)
+	{
+		switch (rxMsg[0])
+		{
+			case 'p':
+			case 'P':
+				txOverUsbUart = 0;
+				break;
+			case 't':
+			case 'T':
+				txOverUsbUart = 1;
+				break;
+			case 'h':
+			case 'H':
+				memset(usbComOutBuf, 0, USB_COM_BUFSIZE);
+				sprintf((char *)usbComOutBuf, "BLE P0_0 High.\n");
+				CDC_Transmit_FS(usbComOutBuf, strlen((char *)usbComOutBuf));
+        setBleWake(GPIO_PIN_SET);
+				break;
+			case 'l':
+			case 'L':
+				memset(usbComOutBuf, 0, USB_COM_BUFSIZE);
+				sprintf((char *)usbComOutBuf, "BLE P0_0 Low.\n");
+				CDC_Transmit_FS(usbComOutBuf, strlen((char *)usbComOutBuf));
+        setBleWake(GPIO_PIN_SET);
+        setBleWake(GPIO_PIN_RESET);
+				break;
+			case 'a':
+			case 'A':
+				memset(usbComOutBuf, 0, USB_COM_BUFSIZE);
+				sprintf((char *)usbComOutBuf, "BLE ADDR Command.\n");
+				CDC_Transmit_FS(usbComOutBuf, strlen((char *)usbComOutBuf));
+        HAL_UART_Transmit(&huart6, addrCmd, 8, TIMEOUT);
+				break;
+			case 'd':
+			case 'D':
+				memset(usbComOutBuf, 0, USB_COM_BUFSIZE);
+				sprintf((char *)usbComOutBuf, "BLE DFU Command.\n");
+				CDC_Transmit_FS(usbComOutBuf, strlen((char *)usbComOutBuf));
+        HAL_UART_Transmit(&huart6, dfuCmd, 5, TIMEOUT);
+				break;
+			default:
+				memset(usbComOutBuf, 0, USB_COM_BUFSIZE);
+				sprintf((char *)usbComOutBuf, "Command \'%c\' is not valid.\n", rxMsg[0]);
+				CDC_Transmit_FS(usbComOutBuf, strlen((char *)usbComOutBuf));
+				break;
+		}
+	}
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  rxBuf[rxBufIdx++] = rxByte;
+  HAL_UART_Receive_DMA(&huart6, &rxByte, 1);
+}
 /* USER CODE END 4 */
 
 /**
