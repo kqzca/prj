@@ -1,0 +1,26 @@
+# Sober Steering Wearable Prototype
+# BLE113 Bluetooth Module Firmware
+
+dim sensor(4)
+dim result2
+dim data_len
+dim written
+
+event system_boot(major,minor,patch,build,ll_version,protocol,hw)
+    #start advertising in connectable mode
+    call gap_set_mode(gap_general_discoverable,gap_undirected_connectable)
+	# Enable GPIO interrupts from PORT 1 PINs P1_2 on rising edge
+	call hardware_io_port_config_irq(1, $4, 0)
+end
+
+event hardware_io_port_status(timestamp, port, irq, state)
+   #i2c read
+   call hardware_i2c_read(128, 1, 4) (result2, data_len, sensor(0:4))
+
+   #write to GATT
+   call attributes_write(xgatt_sensor,0,4,sensor(0:4))
+end
+
+event connection_disconnected(handle, result)
+    call gap_set_mode(gap_general_discoverable,gap_undirected_connectable)
+end
