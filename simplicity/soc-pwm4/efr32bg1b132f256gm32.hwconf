@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="ASCII"?>
+<device:XMLDevice xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:device="http://www.silabs.com/ss/hwconfig/document/device.ecore" name="EFR32BG1B132F256GM32" partId="mcu.arm.efr32.bg1.efr32bg1b132f256gm32">
+  <mode name="DefaultMode">
+    <property object="ADC0" propertyId="ABPeripheral.included" value="true"/>
+    <property object="ADC0" propertyId="singlesamplemode.singlesamplemodesettings.input" value="APORT1XCH10 (PC10)"/>
+    <property object="ADC0" propertyId="singlesamplemode.singlesamplemodesettings.positiveinputconfiguration" value="(PC10) from ADC0_P"/>
+    <property object="ADC0" propertyId="singlesamplemode.singlesamplemodesettings.reference" value="Internal 2.5V"/>
+    <property object="ADC0" propertyId="singlesamplemode.singlesamplemodesettings.singlesamplemode" value="Enabled"/>
+    <property object="CMU" propertyId="ABPeripheral.included" value="true"/>
+    <property object="CMU" propertyId="clocksettings.hfclocksettings.hfclocksource" value="HFXO"/>
+    <property object="CMU" propertyId="clocksettings.lfclocksettings.lfaclocksource" value="LFXO"/>
+    <property object="CMU" propertyId="clocksettings.lfclocksettings.lfbclocksource" value="LFXO"/>
+    <property object="CMU" propertyId="clocksettings.lfclocksettings.lfeclocksource" value="LFXO"/>
+    <property object="CMU" propertyId="hfxo.initialization.autostarthfxoonem01entry" value="Enable and select as HFSRCCLK"/>
+    <property object="CMU" propertyId="lfxo.initialization.internalloadcapacitancectune" value="32"/>
+    <property object="CRYPTO" propertyId="ABPeripheral.included" value="true"/>
+    <property object="CRYPTO" propertyId="crypto.settings.hiddenbysdk" value="On"/>
+    <property object="DefaultMode" propertyId="mode.diagramLocation" value="0, 0"/>
+    <property object="EMU" propertyId="ABPeripheral.included" value="true"/>
+    <property object="EMU" propertyId="emu.settings.hiddenbysdk" value="On"/>
+    <property object="GPCRC" propertyId="ABPeripheral.included" value="true"/>
+    <property object="GPCRC" propertyId="gpcrc.settings.hiddenbysdk" value="On"/>
+    <property object="GPIO" propertyId="ABPeripheral.included" value="true"/>
+    <property object="LDMA" propertyId="ABPeripheral.included" value="true"/>
+    <property object="LDMA" propertyId="ldma.settings.hiddenbysdk" value="On"/>
+    <property object="LFXO" propertyId="ABPeripheral.included" value="true"/>
+    <property object="LFXO" propertyId="lfxo.settings.hiddenbysdk" value="On"/>
+    <property object="PA0" propertyId="ports.settings.pinmode" value="Push-pull"/>
+    <property object="PA1" propertyId="ports.settings.pinmode" value="Push-pull"/>
+    <property object="PD13" propertyId="ports.settings.pinmode" value="Push-pull"/>
+    <property object="PD14" propertyId="ports.settings.pinmode" value="Push-pull"/>
+    <property object="PD15" propertyId="ports.settings.pinmode" value="Push-pull"/>
+    <property object="PORTIO" propertyId="portio.aport.enable.ap_6" value="Enabled"/>
+    <property object="PORTIO" propertyId="portio.lfxo.enable.n" value="Enabled"/>
+    <property object="PORTIO" propertyId="portio.lfxo.enable.n.hiddenbysdk" value="On"/>
+    <property object="PORTIO" propertyId="portio.lfxo.enable.p" value="Enabled"/>
+    <property object="PORTIO" propertyId="portio.lfxo.enable.p.hiddenbysdk" value="On"/>
+    <property object="PORTIO" propertyId="portio.timer1.enable.cc0" value="Enabled"/>
+    <property object="PORTIO" propertyId="portio.timer1.enable.cc1" value="Enabled"/>
+    <property object="PORTIO" propertyId="portio.timer1.enable.cc2" value="Enabled"/>
+    <property object="PORTIO" propertyId="portio.timer1.enable.cc3" value="Enabled"/>
+    <property object="PORTIO" propertyId="portio.timer1.location.timer1_cc2loc" value="21"/>
+    <property object="PORTIO" propertyId="portio.timer1.location.timer1_cc3loc" value="19"/>
+    <property object="PRS" propertyId="ABPeripheral.included" value="true"/>
+    <property object="PRS" propertyId="prs.channel0configuration.hiddenbysdk" value="On"/>
+    <property object="PRS" propertyId="prs.channel11configuration.hiddenbysdk" value="On"/>
+    <property object="PRS" propertyId="prs.channel1configuration.hiddenbysdk" value="On"/>
+    <property object="PRS" propertyId="prs.channel2configuration.hiddenbysdk" value="On"/>
+    <property object="PRS" propertyId="prs.channel3configuration.hiddenbysdk" value="On"/>
+    <property object="RTCC" propertyId="ABPeripheral.included" value="true"/>
+    <property object="RTCC" propertyId="rtcc.settings.hiddenbysdk" value="On"/>
+    <property object="TIMER1" propertyId="ABPeripheral.included" value="true"/>
+    <property object="TIMER1" propertyId="timer.capturecomparech0.ccmode" value="PWM"/>
+    <property object="TIMER1" propertyId="timer.capturecomparech1.ccmode" value="PWM"/>
+    <property object="TIMER1" propertyId="timer.capturecomparech2.ccmode" value="PWM"/>
+    <property object="TIMER1" propertyId="timer.capturecomparech3.ccmode" value="PWM"/>
+  </mode>
+  <modeTransition>
+    <property object="RESET &#x2192; DefaultMode" propertyId="modeTransition.source" value="RESET"/>
+    <property object="RESET &#x2192; DefaultMode" propertyId="modeTransition.target" value="DefaultMode"/>
+  </modeTransition>
+</device:XMLDevice>
