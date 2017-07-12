@@ -60,5 +60,25 @@
         <properties write="true" write_requirement="optional"/>
       </characteristic>
     </service>
+    
+    <!--Motor Control-->
+    <service advertise="true" name="Motor Control" requirement="mandatory" sourceId="custom.type" type="primary" uuid="7bc4630d-6248-4e54-9a6a-e55a1eefe5a5">
+      <informativeText>Custom service</informativeText>
+      
+      <!--Number of Motors-->
+      <characteristic id="numOfMotors" name="Number of Motors" sourceId="custom.type" uuid="9d30bc27-c082-4004-bd09-fb0f5681a31c">
+        <informativeText>Custom characteristic</informativeText>
+        <value length="1" type="hex" variable_length="false">4</value>
+        <properties notify="true" notify_requirement="optional" read="true" read_requirement="optional"/>
+      </characteristic>
+      
+      <!--Battery Voltage-->
+      <characteristic id="batVol" name="Battery Voltage" sourceId="custom.type" uuid="13786de0-6ef6-43a9-b436-3ce705464b2d">
+        <description>Devide it by 10</description>
+        <informativeText>Custom characteristic</informativeText>
+        <value length="1" type="hex" variable_length="false">80</value>
+        <properties notify="true" notify_requirement="optional" read="true" read_requirement="optional"/>
+      </characteristic>
+    </service>
   </gatt>
 </project>
