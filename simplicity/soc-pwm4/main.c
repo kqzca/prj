@@ -81,6 +81,8 @@ static const gecko_configuration_t config = {
 /* Flag for indicating DFU Reset must be performed */
 uint8_t boot_to_dfu = 0;
 
+#define NUM_CH 4
+uint32_t timerCount[NUM_CH] = { 0 };
 /**************************************************************************//**
  * @brief TIMER1_IRQHandler
  * Interrupt Service Routine TIMER0 Interrupt Line
@@ -88,6 +90,9 @@ uint8_t boot_to_dfu = 0;
 void TIMER1_IRQHandler(void)
 {
   /* Clear flag for TIMER1 overflow interrupt */
+  for (int ch=0; ch<NUM_CH; ch++) {
+	TIMER_CompareBufSet(TIMER1, ch, timerCount[ch]);
+  }
   TIMER_IntClear(TIMER1, TIMER_IF_OF);
 }
 
@@ -141,10 +146,10 @@ int main(void)
   uint32_t pwmClkFreq = CMU_ClockFreqGet(cmuClock_HFPER);
   uint32_t topVal = pwmClkFreq/PWM_FREQ;
   TIMER_TopSet(TIMER1, topVal);
-  TIMER_CompareBufSet(TIMER1, 0, topVal/2);
-  TIMER_CompareBufSet(TIMER1, 1, topVal/2);
-  TIMER_CompareBufSet(TIMER1, 2, topVal*3/4);
-  TIMER_CompareBufSet(TIMER1, 3, topVal/4);
+  timerCount[0] = topVal*3/4;
+  timerCount[1] = topVal/4;
+  timerCount[2] = topVal*adcValue/0xFFF;
+  timerCount[3] = topVal*(0xFFF-adcValue)/0xFFF;
 
   /* Enable timer1 interrupt */
   TIMER_IntEnable(TIMER1, TIMER_IF_OF);
@@ -161,7 +166,9 @@ int main(void)
     struct gecko_cmd_packet* evt;
 
     /* Check for stack event. */
-    evt = gecko_wait_event();
+    evt = gecko_peek_event();
+    timerCount[2] = topVal*adcValue/0xFFF;
+    timerCount[3] = topVal*(0xFFF-adcValue)/0xFFF;
 
     /* Handle events */
     switch (BGLIB_MSG_ID(evt->header)) {
