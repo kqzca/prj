@@ -81,8 +81,12 @@ static const gecko_configuration_t config = {
 /* Flag for indicating DFU Reset must be performed */
 uint8_t boot_to_dfu = 0;
 
-#define NUM_CH (4)
-uint32_t timerCount[NUM_CH] = { 0 };
+/* Connection handle variable. */
+uint8_t connection_handle = 0;
+bool connected = false;
+
+#define NUM_MOTOR_CTRL_CH (4)
+uint32_t timerCount[NUM_MOTOR_CTRL_CH] = { 0 };
 /**************************************************************************//**
  * @brief TIMER1_IRQHandler
  * Interrupt Service Routine TIMER0 Interrupt Line
@@ -90,7 +94,7 @@ uint32_t timerCount[NUM_CH] = { 0 };
 void TIMER1_IRQHandler(void)
 {
   /* Clear flag for TIMER1 overflow interrupt */
-  for (int ch=0; ch<NUM_CH; ch++) {
+  for (int ch=0; ch<NUM_MOTOR_CTRL_CH; ch++) {
 	TIMER_CompareBufSet(TIMER1, ch, timerCount[ch]);
   }
   TIMER_IntClear(TIMER1, TIMER_IF_OF);
@@ -165,17 +169,16 @@ int main(void)
   while (1) {
     /* Event pointer for handling events */
     struct gecko_cmd_packet* evt;
-    /* Connection handle variable. */
-    uint8_t connection_handle = 0;
 
-    if (adcValueOld != adcValueNew) {
-      adcValueOld = adcValueNew;
-      timerCount[2] = topVal * adcValueNew / ADC_MAX;
-      uint8_t batVol = 50 * adcValueNew / ADC_MAX;
-      gecko_cmd_gatt_server_write_attribute_value(gattdb_batVol, 0, 1, &batVol);
-      gecko_cmd_gatt_server_send_characteristic_notification(connection_handle, gattdb_batVol, 1, &batVol);
+    if (connected) {
+      if (adcValueOld != adcValueNew) {
+        adcValueOld = adcValueNew;
+        timerCount[2] = topVal * adcValueNew / ADC_MAX;
+        uint8_t batVol = 50 * adcValueNew / ADC_MAX;
+        gecko_cmd_gatt_server_write_attribute_value(gattdb_batVol, 0, 1, &batVol);
+        gecko_cmd_gatt_server_send_characteristic_notification(connection_handle, gattdb_batVol, 1, &batVol);
+      }
     }
-
     /* Check for stack event. */
     evt = gecko_peek_event();
     if (evt == NULL) continue;
@@ -198,6 +201,7 @@ int main(void)
       // LE CONNECTION OPENED (remote device connected)
       case gecko_evt_le_connection_opened_id:
         connection_handle = evt->data.evt_le_connection_opened.connection;
+        connected = true;
         break;
 
       case gecko_evt_le_connection_closed_id:
@@ -231,7 +235,7 @@ int main(void)
           if (evt->data.evt_gatt_server_user_write_request.value.len == 1)
           {
         	uint8_t percent = evt->data.evt_gatt_server_user_write_request.value.data[0];
-            timerCount[3] = topVal * (percent <= 100 ? percent : 0);
+            timerCount[3] = topVal * (percent <= 100 ? percent : 0) / 100;
 			gecko_cmd_gatt_server_send_user_write_response(
 				evt->data.evt_gatt_server_user_write_request.connection,
 				evt->data.evt_gatt_server_user_write_request.characteristic,

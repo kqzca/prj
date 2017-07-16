@@ -15,9 +15,9 @@ extern const struct bg_gattdb_def bg_gattdb_data;
 
 #define gattdb_service_changed_char             3
 #define gattdb_device_name                      7
-#define gattdb_ota_control                     19
-#define gattdb_numOfMotors                     22
-#define gattdb_batVol                          26
-#define gattdb_pwm4Percentage                  30
+#define gattdb_numOfMotors                     19
+#define gattdb_batVol                          23
+#define gattdb_pwm4Percentage                  27
+#define gattdb_ota_control                     31
 
 #endif
