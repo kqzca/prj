@@ -69,12 +69,36 @@
         <properties notify="true" notify_requirement="optional" read="true" read_requirement="optional"/>
       </characteristic>
       
-      <!--PWM4Percentage-->
-      <characteristic id="pwm4Percentage" name="PWM4Percentage" sourceId="custom.type" uuid="1a6aeac8-5eb0-44f5-9b10-99a25a2f3f1e">
-        <description>0 to 100 PWM control</description>
+      <!--PWM1Percentage-->
+      <characteristic id="pwm1Percentage" name="PWM1Percentage" sourceId="custom.type" uuid="3db5e307-727f-40ef-9c8d-c83958fed60e">
+        <description>0 to 100 percent PWM 1</description>
         <informativeText>Custom characteristic</informativeText>
         <value length="1" type="user" variable_length="false"/>
-        <properties read="true" read_requirement="optional" write="true" write_requirement="optional"/>
+        <properties write="true" write_requirement="optional"/>
+      </characteristic>
+      
+      <!--PWM2Percentage-->
+      <characteristic id="pwm2Percentage" name="PWM2Percentage" sourceId="custom.type" uuid="3b00a50f-3986-4e91-a93e-c57adaf18721">
+        <description>0 to 100 percent PWM 2</description>
+        <informativeText>Custom characteristic</informativeText>
+        <value length="1" type="user" variable_length="false"/>
+        <properties write="true" write_requirement="optional"/>
+      </characteristic>
+      
+      <!--PWM3Percentage-->
+      <characteristic id="pwm3Percentage" name="PWM3Percentage" sourceId="custom.type" uuid="771f286b-855e-414f-8d15-1dbdec72ee72">
+        <description>0 to 100 percent PWM 3</description>
+        <informativeText>Custom characteristic</informativeText>
+        <value length="1" type="user" variable_length="false"/>
+        <properties write="true" write_requirement="optional"/>
+      </characteristic>
+      
+      <!--PWM4Percentage-->
+      <characteristic id="pwm4Percentage" name="PWM4Percentage" sourceId="custom.type" uuid="1a6aeac8-5eb0-44f5-9b10-99a25a2f3f1e">
+        <description>0 to 100 percent PWM 4</description>
+        <informativeText>Custom characteristic</informativeText>
+        <value length="1" type="user" variable_length="false"/>
+        <properties write="true" write_requirement="optional"/>
       </characteristic>
     </service>
     

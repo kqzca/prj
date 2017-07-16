@@ -231,6 +231,36 @@ int main(void)
 
           /* Close connection to enter to DFU OTA mode */
           gecko_cmd_endpoint_close(evt->data.evt_gatt_server_user_write_request.connection);
+        } else if (evt->data.evt_gatt_server_user_write_request.characteristic == gattdb_pwm1Percentage) {
+          if (evt->data.evt_gatt_server_user_write_request.value.len == 1)
+          {
+        	uint8_t percent = evt->data.evt_gatt_server_user_write_request.value.data[0];
+            timerCount[0] = topVal * (percent <= 100 ? percent : 0) / 100;
+			gecko_cmd_gatt_server_send_user_write_response(
+				evt->data.evt_gatt_server_user_write_request.connection,
+				evt->data.evt_gatt_server_user_write_request.characteristic,
+				0x00 /* SUCCESS */);
+          }
+        } else if (evt->data.evt_gatt_server_user_write_request.characteristic == gattdb_pwm2Percentage) {
+          if (evt->data.evt_gatt_server_user_write_request.value.len == 1)
+          {
+        	uint8_t percent = evt->data.evt_gatt_server_user_write_request.value.data[0];
+            timerCount[1] = topVal * (percent <= 100 ? percent : 0) / 100;
+			gecko_cmd_gatt_server_send_user_write_response(
+				evt->data.evt_gatt_server_user_write_request.connection,
+				evt->data.evt_gatt_server_user_write_request.characteristic,
+				0x00 /* SUCCESS */);
+          }
+        } else if (evt->data.evt_gatt_server_user_write_request.characteristic == gattdb_pwm3Percentage) {
+          if (evt->data.evt_gatt_server_user_write_request.value.len == 1)
+          {
+        	//uint8_t percent = evt->data.evt_gatt_server_user_write_request.value.data[0];
+            //timerCount[2] = topVal * (percent <= 100 ? percent : 0) / 100;
+			gecko_cmd_gatt_server_send_user_write_response(
+				evt->data.evt_gatt_server_user_write_request.connection,
+				evt->data.evt_gatt_server_user_write_request.characteristic,
+				0x00 /* SUCCESS */);
+          }
         } else if (evt->data.evt_gatt_server_user_write_request.characteristic == gattdb_pwm4Percentage) {
           if (evt->data.evt_gatt_server_user_write_request.value.len == 1)
           {

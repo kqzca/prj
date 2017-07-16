@@ -133,8 +133,8 @@
 								<option id="gnu.c.link.option.userobjs.235894103" name="Other objects" superClass="gnu.c.link.option.userobjs" valueType="userObjs">
 									<listOptionValue builtIn="false" value="${StudioSdkPath}/protocol/bluetooth_2.4/lib/EFR32BG1B/EABI/stack.a"/>
 									<listOptionValue builtIn="false" value="${StudioSdkPath}/protocol/bluetooth_2.4/lib/EFR32BG1B/EABI/binstack.o"/>
-									<listOptionValue builtIn="false" value="${StudioSdkPath}/protocol/bluetooth_2.4/lib/EFR32BG1B/GCC/bgapi.a"/>
 									<listOptionValue builtIn="false" value="${StudioSdkPath}/protocol/bluetooth_2.4/lib/EFR32BG1B/EABI/binbootloader.o"/>
+									<listOptionValue builtIn="false" value="${StudioSdkPath}/protocol/bluetooth_2.4/lib/EFR32BG1B/GCC/bgapi.a"/>
 								</option>
 								<option id="gnu.c.link.option.libs.1931433555" name="Libraries (-l)" superClass="gnu.c.link.option.libs" valueType="libs">
 									<listOptionValue builtIn="false" srcPrefixMapping="" srcRootPath="" value="m"/>
@@ -156,7 +156,7 @@
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
 		</cconfiguration>
 	</storageModule>
-	<storageModule moduleId="com.silabs.ss.framework.ide.project.core.cpp" project.generation="82" projectCommon.boardIds="brd4301a:0.0.0" projectCommon.partId="mcu.arm.efr32.bg1.efr32bg1b132f256gm32" projectCommon.sdkId="com.silabs.sdk.stack.super:1.1.0._310456152"/>
+	<storageModule moduleId="com.silabs.ss.framework.ide.project.core.cpp" project.generation="35" projectCommon.boardIds="brd4301a:0.0.0" projectCommon.partId="mcu.arm.efr32.bg1.efr32bg1b132f256gm32" projectCommon.sdkId="com.silabs.sdk.stack.super:1.1.0._310456152"/>
 	<storageModule moduleId="cdtBuildSystem" version="4.0.0">
 		<project id="soc-pwm4.com.silabs.ss.framework.ide.project.core.cdt.cdtMbsProjectType.312557258" name="SLS CDT Project" projectType="com.silabs.ss.framework.ide.project.core.cdt.cdtMbsProjectType"/>
 	</storageModule>
