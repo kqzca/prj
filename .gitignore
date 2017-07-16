@@ -368,3 +368,8 @@ paket-files/
 **/LM_G3_UCD Images/
 **/MDK-ARM/DebugConfig/
 **/inc/BuildVer.h
+/simplicity/soc-pwm4/GNU ARM v4.9.3 - Default/soc-pwm4.s37
+/simplicity/soc-pwm4/GNU ARM v4.9.3 - Default/soc-pwm4.axf
+/simplicity/soc-pwm4/GNU ARM v4.9.3 - Default/soc-pwm4.bin
+/simplicity/soc-pwm4/GNU ARM v4.9.3 - Default/soc-pwm4.hex
+/simplicity/soc-pwm4/GNU ARM v4.9.3 - Default/soc-pwm4.map
