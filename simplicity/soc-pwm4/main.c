@@ -81,7 +81,7 @@ static const gecko_configuration_t config = {
 /* Flag for indicating DFU Reset must be performed */
 uint8_t boot_to_dfu = 0;
 
-#define NUM_CH 4
+#define NUM_CH (4)
 uint32_t timerCount[NUM_CH] = { 0 };
 /**************************************************************************//**
  * @brief TIMER1_IRQHandler
@@ -96,7 +96,8 @@ void TIMER1_IRQHandler(void)
   TIMER_IntClear(TIMER1, TIMER_IF_OF);
 }
 
-static uint32_t adcValue = 0;
+const uint16_t ADC_MAX = 0xFFF;
+static uint32_t adcValueNew = 0, adcValueOld = 0;
 /**************************************************************************//**
  * @brief ADC0 IRQ handler.
  *****************************************************************************/
@@ -106,7 +107,7 @@ void ADC0_IRQHandler(void)
   if ((ADC0->IEN & ADC_IEN_SINGLE) && (ADC0->IF & ADC_IF_SINGLE))
   {
     /* Read SINGLEDATA will clear SINGLE IF flag */
-    adcValue = ADC_DataSingleGet(ADC0);
+	  adcValueNew = ADC_DataSingleGet(ADC0);
     ADC_Start(ADC0, adcStartSingle);
   }
 }
@@ -146,10 +147,10 @@ int main(void)
   uint32_t pwmClkFreq = CMU_ClockFreqGet(cmuClock_HFPER);
   uint32_t topVal = pwmClkFreq/PWM_FREQ;
   TIMER_TopSet(TIMER1, topVal);
-  timerCount[0] = topVal*3/4;
-  timerCount[1] = topVal/4;
-  timerCount[2] = topVal*adcValue/0xFFF;
-  timerCount[3] = topVal*(0xFFF-adcValue)/0xFFF;
+  timerCount[0] = topVal * 3 / 4;
+  timerCount[1] = topVal / 4;
+  timerCount[2] = topVal * adcValueNew / ADC_MAX;
+  timerCount[3] = topVal * (ADC_MAX - adcValueNew) / ADC_MAX;
 
   /* Enable timer1 interrupt */
   TIMER_IntEnable(TIMER1, TIMER_IF_OF);
@@ -164,11 +165,20 @@ int main(void)
   while (1) {
     /* Event pointer for handling events */
     struct gecko_cmd_packet* evt;
+    /* Connection handle variable. */
+    uint8_t connection_handle = 0;
+
+    if (adcValueOld != adcValueNew) {
+      adcValueOld = adcValueNew;
+      timerCount[2] = topVal * adcValueNew / ADC_MAX;
+      uint8_t batVol = 50 * adcValueNew / ADC_MAX;
+      gecko_cmd_gatt_server_write_attribute_value(gattdb_batVol, 0, 1, &batVol);
+      gecko_cmd_gatt_server_send_characteristic_notification(connection_handle, gattdb_batVol, 1, &batVol);
+    }
 
     /* Check for stack event. */
     evt = gecko_peek_event();
-    timerCount[2] = topVal*adcValue/0xFFF;
-    timerCount[3] = topVal*(0xFFF-adcValue)/0xFFF;
+    if (evt == NULL) continue;
 
     /* Handle events */
     switch (BGLIB_MSG_ID(evt->header)) {
@@ -185,6 +195,11 @@ int main(void)
         gecko_cmd_le_gap_set_mode(le_gap_general_discoverable, le_gap_undirected_connectable);
         break;
 
+      // LE CONNECTION OPENED (remote device connected)
+      case gecko_evt_le_connection_opened_id:
+        connection_handle = evt->data.evt_le_connection_opened.connection;
+        break;
+
       case gecko_evt_le_connection_closed_id:
 
         /* Check if need to boot to dfu mode */
@@ -197,13 +212,10 @@ int main(void)
         }
         break;
 
-      /* Events related to OTA upgrading
-         ----------------------------------------------------------------------------- */
-
-      /* Check if the user-type OTA Control Characteristic was written.
-       * If ota_control was written, boot the device into Device Firmware Upgrade (DFU) mode. */
+      // GATT SERVER USER WRITE REQUEST (remote GATT client wrote a new value to a user-type characteristic)
       case gecko_evt_gatt_server_user_write_request_id:
-
+        /* Check if the user-type OTA Control Characteristic was written.
+         * If ota_control was written, boot the device into Device Firmware Upgrade (DFU) mode. */
         if (evt->data.evt_gatt_server_user_write_request.characteristic == gattdb_ota_control) {
           /* Set flag to enter to OTA mode */
           boot_to_dfu = 1;
@@ -215,6 +227,16 @@ int main(void)
 
           /* Close connection to enter to DFU OTA mode */
           gecko_cmd_endpoint_close(evt->data.evt_gatt_server_user_write_request.connection);
+        } else if (evt->data.evt_gatt_server_user_write_request.characteristic == gattdb_pwm4Percentage) {
+          if (evt->data.evt_gatt_server_user_write_request.value.len == 1)
+          {
+        	uint8_t percent = evt->data.evt_gatt_server_user_write_request.value.data[0];
+            timerCount[3] = topVal * (percent <= 100 ? percent : 0);
+			gecko_cmd_gatt_server_send_user_write_response(
+				evt->data.evt_gatt_server_user_write_request.connection,
+				evt->data.evt_gatt_server_user_write_request.characteristic,
+				0x00 /* SUCCESS */);
+          }
         }
         break;
 

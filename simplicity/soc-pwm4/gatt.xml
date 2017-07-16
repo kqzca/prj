@@ -67,6 +67,7 @@
       
       <!--Number of Motors-->
       <characteristic id="numOfMotors" name="Number of Motors" sourceId="custom.type" uuid="9d30bc27-c082-4004-bd09-fb0f5681a31c">
+        <description>Number of motors</description>
         <informativeText>Custom characteristic</informativeText>
         <value length="1" type="hex" variable_length="false">4</value>
         <properties notify="true" notify_requirement="optional" read="true" read_requirement="optional"/>
@@ -74,10 +75,18 @@
       
       <!--Battery Voltage-->
       <characteristic id="batVol" name="Battery Voltage" sourceId="custom.type" uuid="13786de0-6ef6-43a9-b436-3ce705464b2d">
-        <description>Devide it by 10</description>
+        <description>Battery voltage, devide it by 10</description>
         <informativeText>Custom characteristic</informativeText>
-        <value length="1" type="hex" variable_length="false">80</value>
+        <value length="1" type="hex" variable_length="false">00</value>
         <properties notify="true" notify_requirement="optional" read="true" read_requirement="optional"/>
+      </characteristic>
+      
+      <!--PWM4Percentage-->
+      <characteristic id="pwm4Percentage" name="PWM4Percentage" sourceId="custom.type" uuid="1a6aeac8-5eb0-44f5-9b10-99a25a2f3f1e">
+        <description>0 to 100 PWM control</description>
+        <informativeText>Custom characteristic</informativeText>
+        <value length="1" type="hex" variable_length="false">00</value>
+        <properties read="true" read_requirement="optional" write="true" write_requirement="optional"/>
       </characteristic>
     </service>
   </gatt>
