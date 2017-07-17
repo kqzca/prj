@@ -112,7 +112,6 @@ void ADC0_IRQHandler(void)
   {
     /* Read SINGLEDATA will clear SINGLE IF flag */
 	  adcValueNew = ADC_DataSingleGet(ADC0);
-    ADC_Start(ADC0, adcStartSingle);
   }
 }
 /**
@@ -132,36 +131,10 @@ int main(void)
   /* Initialize peripherals */
   enter_DefaultMode_from_RESET();
 
-  GPIO_PinOutClear(gpioPortD, 15);
-
-
-
-  /* Enable ADC Interrupt when reaching DVL and window compare */
-  ADC_IntEnable(ADC0, ADC_IEN_SINGLE);
-  /* Clear the FIFOs and pending interrupt */
-  ADC0->SINGLEFIFOCLEAR = ADC_SINGLEFIFOCLEAR_SINGLEFIFOCLEAR;
-  NVIC_ClearPendingIRQ(ADC0_IRQn);
-  NVIC_EnableIRQ(ADC0_IRQn);
-  ADC_Start(ADC0, adcStartSingle);
-
-
-
-  /* Timer1 form 4 pwm channels */
+  //GPIO_PinOutClear(gpioPortD, 15);
   const uint32_t PWM_FREQ = 16000;
   uint32_t pwmClkFreq = CMU_ClockFreqGet(cmuClock_HFPER);
   uint32_t topVal = pwmClkFreq/PWM_FREQ;
-  TIMER_TopSet(TIMER1, topVal);
-  timerCount[0] = topVal * 3 / 4;
-  timerCount[1] = topVal / 4;
-  timerCount[2] = topVal * adcValueNew / ADC_MAX;
-  timerCount[3] = topVal * (ADC_MAX - adcValueNew) / ADC_MAX;
-
-  /* Enable timer1 interrupt */
-  TIMER_IntEnable(TIMER1, TIMER_IF_OF);
-  /* Enable TIMER1 interrupt vector in NVIC */
-  NVIC_EnableIRQ(TIMER1_IRQn);
-
-
 
   /* Initialize stack */
   gecko_init(&config);
@@ -170,18 +143,8 @@ int main(void)
     /* Event pointer for handling events */
     struct gecko_cmd_packet* evt;
 
-    if (connected) {
-      if (adcValueOld != adcValueNew) {
-        adcValueOld = adcValueNew;
-        timerCount[2] = topVal * adcValueNew / ADC_MAX;
-        uint8_t batVol = 50 * adcValueNew / ADC_MAX;
-        gecko_cmd_gatt_server_write_attribute_value(gattdb_batVol, 0, 1, &batVol);
-        gecko_cmd_gatt_server_send_characteristic_notification(connection_handle, gattdb_batVol, 1, &batVol);
-      }
-    }
     /* Check for stack event. */
-    evt = gecko_peek_event();
-    if (evt == NULL) continue;
+    evt = gecko_wait_event();
 
     /* Handle events */
     switch (BGLIB_MSG_ID(evt->header)) {
@@ -200,6 +163,29 @@ int main(void)
 
       // LE CONNECTION OPENED (remote device connected)
       case gecko_evt_le_connection_opened_id:
+    	/* 1 second tick */
+    	gecko_cmd_hardware_set_soft_timer(32768, 0, 0);
+    	{
+          /* Enable ADC Interrupt when reaching DVL and window compare */
+          ADC_IntEnable(ADC0, ADC_IEN_SINGLE);
+          /* Clear the FIFOs and pending interrupt */
+          ADC0->SINGLEFIFOCLEAR = ADC_SINGLEFIFOCLEAR_SINGLEFIFOCLEAR;
+          NVIC_ClearPendingIRQ(ADC0_IRQn);
+          NVIC_EnableIRQ(ADC0_IRQn);
+    	}
+
+    	{
+    	  /* Timer1 form 4 pwm channels */
+    	  TIMER_TopSet(TIMER1, topVal);
+    	  timerCount[0] = topVal * 3 / 4;
+    	  timerCount[1] = topVal / 4;
+    	  timerCount[2] = topVal * adcValueNew / ADC_MAX;
+    	  timerCount[3] = topVal * (ADC_MAX - adcValueNew) / ADC_MAX;
+    	  /* Enable timer1 interrupt */
+    	  TIMER_IntEnable(TIMER1, TIMER_IF_OF);
+    	  /* Enable TIMER1 interrupt vector in NVIC */
+    	  NVIC_EnableIRQ(TIMER1_IRQn);
+    	}
         connection_handle = evt->data.evt_le_connection_opened.connection;
         connected = true;
         break;
@@ -214,6 +200,33 @@ int main(void)
           /* Restart advertising after client has disconnected */
           gecko_cmd_le_gap_set_mode(le_gap_general_discoverable, le_gap_undirected_connectable);
         }
+
+    	gecko_cmd_hardware_set_soft_timer(0, 0, 0);
+    	ADC_IntDisable(ADC0, ADC_IEN_SINGLE);
+        NVIC_DisableIRQ(ADC0_IRQn);
+    	TIMER_IntDisable(TIMER1, TIMER_IF_OF);
+        for (int ch=0; ch<NUM_MOTOR_CTRL_CH; ch++) {
+          timerCount[ch] = 0;
+          TIMER_CompareBufSet(TIMER1, ch, timerCount[ch]);
+        }
+    	NVIC_DisableIRQ(TIMER1_IRQn);
+        connected = false;
+        break;
+
+      /* This event is generated when the software timer has ticked. In this example the temperature
+       * is read after every 1 second and then the indication of that is sent to the listening client. */
+      case gecko_evt_hardware_soft_timer_id:
+        /* Measure the ADC */
+        //if (connected) {
+          if (adcValueOld != adcValueNew) {
+	        adcValueOld = adcValueNew;
+	        timerCount[2] = topVal * adcValueNew / ADC_MAX;
+	        uint8_t batVol = 50 * adcValueNew / ADC_MAX;
+	        gecko_cmd_gatt_server_write_attribute_value(gattdb_batVol, 0, 1, &batVol);
+	        gecko_cmd_gatt_server_send_characteristic_notification(connection_handle, gattdb_batVol, 1, &batVol);
+          }
+      	  ADC_Start(ADC0, adcStartSingle);
+        //}
         break;
 
       // GATT SERVER USER WRITE REQUEST (remote GATT client wrote a new value to a user-type characteristic)
