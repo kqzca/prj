@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<hardware>
+    <sleeposc enable="true" ppm="30" />
+    <sleep enable="true" />
+    <txpower power="15" bias="5" />
+    <script enable="true" />
+    
+    <!-- USART 1 used for serial -->
+    <!--
+        Hardware flow control is DISABLED here because if we leave it enabled but nothing
+		is connected to the UART port, then the internal buffer fills up and eventually
+		locks the module. You can have enable flow control when needed (the default setting).
+    -->
+    <usart channel="1" alternate="1" baud="115200" endpoint="none" flow="false" />
+</hardware>
