@@ -14,11 +14,22 @@ event system_boot(major,minor,patch,build,ll_version,protocol,hw)
 end
 
 event hardware_io_port_status(timestamp, port, irq, state)
-   #i2c read
-   call hardware_i2c_read(128, 1, 4) (result2, data_len, sensor(0:4))
-
+   #hardware_i2c_read(address,stop,length)(result,data_len,data_data)
+   #hardware_i2c_write(address,stop,data_len, data_data)(written)
+   
+   #i2c read from MCU, address 0x41
+   call hardware_i2c_read(130, 1, 4) (result2, data_len, sensor(0:4))
+   
    #write to GATT
    call attributes_write(xgatt_sensor,0,4,sensor(0:4))
+   
+   #Si7021-A20 address 0x40, measure RH command 0xE5, read temp cmd 0xE0
+   call hardware_i2c_write(128, 0, 1, "\xE5") (written)
+   call hardware_i2c_read(128, 1, 2) (result2, data_len, sensor(0:2))
+   call hardware_i2c_write(128, 0, 1, "\xE0") (written)
+   call hardware_i2c_read(128, 1, 2) (result2, data_len, sensor(2:2))
+   #write to MCU
+   call hardware_i2c_write(130, 1, 4, sensor(0:4)) (written)
 end
 
 event connection_disconnected(handle, result)

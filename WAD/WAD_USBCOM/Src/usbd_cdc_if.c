@@ -3,7 +3,7 @@
   * @file           : usbd_cdc_if.c
   * @brief          :
   ******************************************************************************
-  * COPYRIGHT(c) 2016 STMicroelectronics
+  * COPYRIGHT(c) 2017 STMicroelectronics
   *
   * Redistribution and use in source and binary forms, with or without modification,
   * are permitted provided that the following conditions are met:
@@ -59,17 +59,8 @@
 /* USER CODE BEGIN PRIVATE_DEFINES */
 /* Define size for the receive and transmit buffer over CDC */
 /* It's up to user to redefine and/or remove those define */
-#define APP_RX_DATA_SIZE  128
-#define APP_TX_DATA_SIZE  128
-
-USBD_CDC_LineCodingTypeDef LineCoding =
-{
-	115200, /* baud rate */
-	0x00, /* stop bits-1 */
-	0x00, /* parity - none */
-	0x08 /* nb. of bits 8 */
-};
-
+#define APP_RX_DATA_SIZE  4
+#define APP_TX_DATA_SIZE  4
 /* USER CODE END PRIVATE_DEFINES */
 /**
   * @}
@@ -100,11 +91,6 @@ uint8_t UserTxBufferFS[APP_TX_DATA_SIZE];
 /* Handle for USB Full Speed IP */
   USBD_HandleTypeDef  *hUsbDevice_0;
 /* USER CODE BEGIN PRIVATE_VARIABLES */
-uint8_t rxChrBuf[RXCHRBUFSIZE];
-uint8_t rxChrBufIdx = 0;
-uint8_t rxMsgBuf[RXMSGBUFSIZE][RXCHRBUFSIZE];
-uint8_t rxMsgBufSetIdx = 0;
-uint8_t rxMsgBufGetIdx = 0;
 /* USER CODE END PRIVATE_VARIABLES */
 
 /**
@@ -226,22 +212,12 @@ static int8_t CDC_Control_FS  (uint8_t cmd, uint8_t* pbuf, uint16_t length)
   /*                                        4 - Space                            */
   /* 6      | bDataBits  |   1   | Number Data bits (5, 6, 7, 8 or 16).          */
   /*******************************************************************************/
-  case CDC_SET_LINE_CODING:
-		LineCoding.bitrate    = (uint32_t)(pbuf[0] | (pbuf[1] << 8) |\
-                            (pbuf[2] << 16) | (pbuf[3] << 24));
-    LineCoding.format     = pbuf[4];
-    LineCoding.paritytype = pbuf[5];
-    LineCoding.datatype   = pbuf[6];  
+  case CDC_SET_LINE_CODING:   
+	
     break;
 
   case CDC_GET_LINE_CODING:     
-		pbuf[0] = (uint8_t)(LineCoding.bitrate);
-		pbuf[1] = (uint8_t)(LineCoding.bitrate >> 8);
-		pbuf[2] = (uint8_t)(LineCoding.bitrate >> 16);
-		pbuf[3] = (uint8_t)(LineCoding.bitrate >> 24);
-		pbuf[4] = LineCoding.format;
-		pbuf[5] = LineCoding.paritytype;
-		pbuf[6] = LineCoding.datatype;
+
     break;
 
   case CDC_SET_CONTROL_LINE_STATE:
@@ -278,28 +254,6 @@ static int8_t CDC_Control_FS  (uint8_t cmd, uint8_t* pbuf, uint16_t length)
 static int8_t CDC_Receive_FS (uint8_t* Buf, uint32_t *Len)
 {
   /* USER CODE BEGIN 6 */
-	//memcpy(UserTxBufferFS, Buf, *Len);
-	//CDC_Transmit_FS(UserTxBufferFS, *Len);
-	for (int i=0; i < *Len; i++)
-	{
-		if ((Buf[i] == '\r') || (Buf[i] == '\n'))
-		{
-			if (rxChrBufIdx > 0)
-			{
-				putMsg();
-			}
-		}
-		else if (rxChrBufIdx >= (RXCHRBUFSIZE - 2))
-		{
-			break;
-		}
-		else
-		{
-			rxChrBuf[rxChrBufIdx] = Buf[i];
-			rxChrBufIdx++;
-		}
-	}
-	
   USBD_CDC_SetRxBuffer(hUsbDevice_0, &Buf[0]);
   USBD_CDC_ReceivePacket(hUsbDevice_0);
   return (USBD_OK);
@@ -321,56 +275,17 @@ uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len)
 {
   uint8_t result = USBD_OK;
   /* USER CODE BEGIN 7 */ 
-	if (hUsbDevice_0 == 0)
-	{
-		return USBD_FAIL;
-	}
-	
-  USBD_CDC_SetTxBuffer(hUsbDevice_0, Buf, Len);     
+  USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDevice_0->pClassData;
+  if (hcdc->TxState != 0){
+    return USBD_BUSY;
+  }
+  USBD_CDC_SetTxBuffer(hUsbDevice_0, Buf, Len);
   result = USBD_CDC_TransmitPacket(hUsbDevice_0);
   /* USER CODE END 7 */ 
   return result;
 }
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_IMPLEMENTATION */
-void putMsg(void)
-{
-	int setIdx = rxMsgBufSetIdx + 1;
-	if (setIdx >= RXMSGBUFSIZE)
-	{
-		setIdx = 0;
-	}
-	
-	// Full, drop
-	if (setIdx == rxMsgBufGetIdx)
-	{
-		return;
-	}
-	memcpy(rxMsgBuf[rxMsgBufSetIdx], rxChrBuf, RXCHRBUFSIZE);
-	memset(rxChrBuf, 0, RXCHRBUFSIZE);
-	rxChrBufIdx = 0;
-	rxMsgBufSetIdx = setIdx;
-}
-
-uint8_t getMsg(uint8_t* Buf, uint8_t Len)
-{
-	// empty
-	if (rxMsgBufSetIdx == rxMsgBufGetIdx)
-	{
-		return 0;
-	}
-	
-	memcpy(Buf, rxMsgBuf[rxMsgBufGetIdx], Len < RXCHRBUFSIZE ? Len : RXCHRBUFSIZE);
-	memset(rxMsgBuf[rxMsgBufGetIdx], 0, RXCHRBUFSIZE);
-	
-	rxMsgBufGetIdx++;
-	if (rxMsgBufGetIdx >= RXMSGBUFSIZE)
-	{
-		rxMsgBufGetIdx = 0;
-	}
-	
-  return 1;
-}
 /* USER CODE END PRIVATE_FUNCTIONS_IMPLEMENTATION */
 
 /**

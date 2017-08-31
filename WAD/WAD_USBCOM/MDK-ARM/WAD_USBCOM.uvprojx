@@ -10,7 +10,6 @@
       <TargetName>WAD_USBCOM</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
-      <pCCUsed>5060061::V5.06 update 1 (build 61)::ARMCC</pCCUsed>
       <TargetOption>
         <TargetCommonOption>
           <Device>STM32L052K6</Device>
@@ -51,7 +50,7 @@
           <OutputName>WAD_USBCOM</OutputName>
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
-          <CreateHexFile>1</CreateHexFile>
+          <CreateHexFile>0</CreateHexFile>
           <DebugInformation>1</DebugInformation>
           <BrowseInformation>1</BrowseInformation>
           <ListingPath></ListingPath>
@@ -335,7 +334,7 @@
               <MiscControls>--C99</MiscControls>
               <Define>USE_HAL_DRIVER,STM32L052xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Inc;           ../Drivers/STM32L0xx_HAL_Driver/Inc;           ../Drivers/STM32L0xx_HAL_Driver/Inc/Legacy;           ../Middlewares/ST/STM32_USB_Device_Library/Core/Inc;           ../Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc;           ../Drivers/CMSIS/Include;           ../Drivers/CMSIS/Device/ST/STM32L0xx/Include</IncludePath>
+              <IncludePath>../Inc;../Drivers/STM32L0xx_HAL_Driver/Inc;../Drivers/STM32L0xx_HAL_Driver/Inc/Legacy;../Middlewares/ST/STM32_USB_Device_Library/Core/Inc;../Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc;../Drivers/CMSIS/Include;../Drivers/CMSIS/Device/ST/STM32L0xx/Include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -415,6 +414,11 @@
               <FilePath>../Drivers/STM32L0xx_HAL_Driver/Src/stm32l0xx_hal_pcd_ex.c</FilePath>
             </File>
             <File>
+              <FileName>stm32l0xx_hal_adc_ex.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Drivers/STM32L0xx_HAL_Driver/Src/stm32l0xx_hal_adc_ex.c</FilePath>
+            </File>
+            <File>
               <FileName>stm32l0xx_hal_rcc.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Drivers/STM32L0xx_HAL_Driver/Src/stm32l0xx_hal_rcc.c</FilePath>
@@ -489,11 +493,6 @@
               <FileType>1</FileType>
               <FilePath>../Drivers/STM32L0xx_HAL_Driver/Src/stm32l0xx_hal_pwr.c</FilePath>
             </File>
-            <File>
-              <FileName>stm32l0xx_hal_adc_ex.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Drivers/STM32L0xx_HAL_Driver/Src/stm32l0xx_hal_adc_ex.c</FilePath>
-            </File>
           </Files>
         </Group>
         <Group>
@@ -538,6 +537,11 @@
               <FileName>usbd_cdc_if.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Src/usbd_cdc_if.c</FilePath>
+            </File>
+            <File>
+              <FileName>adc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Src/adc.c</FilePath>
             </File>
             <File>
               <FileName>usbd_desc.c</FileName>
@@ -589,11 +593,6 @@
               <FileType>1</FileType>
               <FilePath>../Src/gpio.c</FilePath>
             </File>
-            <File>
-              <FileName>adc.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Src/adc.c</FilePath>
-            </File>
           </Files>
         </Group>
         <Group>
@@ -602,7 +601,7 @@
             <File>
               <FileName>system_stm32l0xx.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../Drivers/CMSIS/Device/ST/STM32L0xx/Source/Templates/system_stm32l0xx.c</FilePath>
+              <FilePath>../Drivers/CMSIS//Device/ST/STM32L0xx/Source/Templates/system_stm32l0xx.c</FilePath>
             </File>
           </Files>
         </Group>

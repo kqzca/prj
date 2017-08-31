@@ -5,7 +5,7 @@
   *                      of the DAC instances.
   ******************************************************************************
   *
-  * COPYRIGHT(c) 2016 STMicroelectronics
+  * COPYRIGHT(c) 2017 STMicroelectronics
   *
   * Redistribution and use in source and binary forms, with or without modification,
   * are permitted provided that the following conditions are met:
@@ -71,7 +71,7 @@ void HAL_DAC_MspInit(DAC_HandleTypeDef* hdac)
 
   /* USER CODE END DAC_MspInit 0 */
     /* Peripheral clock enable */
-    __DAC_CLK_ENABLE();
+    __HAL_RCC_DAC_CLK_ENABLE();
   
     /**DAC GPIO Configuration    
     PA4     ------> DAC_OUT1 
@@ -96,7 +96,7 @@ void HAL_DAC_MspDeInit(DAC_HandleTypeDef* hdac)
 
   /* USER CODE END DAC_MspDeInit 0 */
     /* Peripheral clock disable */
-    __DAC_CLK_DISABLE();
+    __HAL_RCC_DAC_CLK_DISABLE();
   
     /**DAC GPIO Configuration    
     PA4     ------> DAC_OUT1 

@@ -5,7 +5,7 @@
   * @brief          : This file implements the USB Device descriptors
   ******************************************************************************
   *
-  * COPYRIGHT(c) 2016 STMicroelectronics
+  * COPYRIGHT(c) 2017 STMicroelectronics
   *
   * Redistribution and use in source and binary forms, with or without modification,
   * are permitted provided that the following conditions are met:
@@ -115,8 +115,8 @@ __ALIGN_BEGIN uint8_t USBD_FS_DeviceDesc[USB_LEN_DEV_DESC] __ALIGN_END =
     USB_DESC_TYPE_DEVICE,       /*bDescriptorType*/
     0x00,                       /* bcdUSB */  
     0x02,
-    0x00,                       /*bDeviceClass*/
-    0x00,                       /*bDeviceSubClass*/
+    0x02,                        /*bDeviceClass*/
+    0x02,                       /*bDeviceSubClass*/
     0x00,                       /*bDeviceProtocol*/
     USB_MAX_EP0_SIZE,          /*bMaxPacketSize*/
     LOBYTE(USBD_VID),           /*idVendor*/
