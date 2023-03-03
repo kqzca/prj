@@ -3,7 +3,7 @@
   * @file           : usbd_cdc_if.h
   * @brief          : Header for usbd_cdc_if file.
   ******************************************************************************
-  * COPYRIGHT(c) 2016 STMicroelectronics
+  * COPYRIGHT(c) 2017 STMicroelectronics
   *
   * Redistribution and use in source and binary forms, with or without modification,
   * are permitted provided that the following conditions are met:
@@ -55,8 +55,6 @@
   * @{
   */ 
 /* USER CODE BEGIN EXPORTED_DEFINES */
-#define RXCHRBUFSIZE 8
-#define RXMSGBUFSIZE 16
 /* USER CODE END EXPORTED_DEFINES */
 
 /**
@@ -101,8 +99,6 @@ extern USBD_CDC_ItfTypeDef  USBD_Interface_fops_FS;
 uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len);
 
 /* USER CODE BEGIN EXPORTED_FUNCTIONS */
-void putMsg(void);
-uint8_t getMsg(uint8_t* Buf, uint8_t Len);
 /* USER CODE END EXPORTED_FUNCTIONS */
 /**
   * @}

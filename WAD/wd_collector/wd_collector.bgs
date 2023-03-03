@@ -1,0 +1,244 @@
+const STATE_STANDBY = 0
+const STATE_SCANNING = 1
+const STATE_CONNECTING = 2
+const STATE_FINDING_WDID_SERVICE = 3
+const STATE_FINDING_WDID_ATTRIBUTES = 4
+const STATE_FINDING_SERVICES = 5
+const STATE_FINDING_ATTRIBUTES = 6
+const STATE_LISTENING_MEASUREMENTS = 7
+
+dim state                       # current application state
+dim att_handlesearch_start      # "start" handle holder during search
+dim att_handlesearch_end        # "end" handle holder during search
+dim att_handle_measurement      # attribute handle
+dim att_handle_measurement_ccc  # client characteristic config handle
+dim att_handle_wdid             # wdid handle
+
+dim i   # overall ad data position index
+dim j   # individual ad field position index
+dim ad_field_length
+dim ad_field_type
+
+dim val_wdid
+dim val_passfail
+dim data_bytes(3)
+dim string(3)
+dim result_report(2)
+
+const DEBUG_P = 0
+procedure debug_print(size, data())
+	if DEBUG_P = 1 then
+		call system_endpoint_tx(system_endpoint_uart1, size, data(0:size))
+	end if
+end
+
+procedure debug_print_byte(data)
+	if DEBUG_P = 1 then
+        # create string representation of test result
+        data_bytes(0:1) = data / 100
+		data_bytes(1:1) = (data - data_bytes(0:1) * 100) / 10
+        data_bytes(2:1) = data - data_bytes(0:1) * 100 - data_bytes(1:1) * 10
+		string(0:1) = data_bytes(0:1) + 48
+		string(1:1) = data_bytes(1:1) + 48
+		string(2:1) = data_bytes(2:1) + 48
+        call debug_print(3, string(0:3))
+        call debug_print(2, "\r\n")
+	end if
+end
+
+event system_boot(major, minor, patch, build, ll_version, protocol_version, hw)
+    state = STATE_STANDBY
+	call debug_print(8, "\r\nWDDC\r\n")
+    # configure scanning (125ms interval, 125ms window, passive)
+    call gap_set_scan_parameters($c8, $c8, 0)
+    call gap_discover(gap_discover_generic)
+    state = STATE_SCANNING
+end
+
+event gap_scan_response(rssi, packet_type, sender, address_type, bond, data_len, data_data)
+    # advertisement packet found during scan, so check for WD service 0x180D
+    i = 0
+    while i < data_len
+        ad_field_length = data_data(i:1)
+        ad_field_type = data_data(i + 1:1)
+        if ad_field_type = $02 || ad_field_type = $03 then
+            # partial ($02) or complete ($03) list of 16-bit UUIDs
+            # search for 0x180D
+            j = 0
+            while j < ad_field_length
+                if data_data(i + j + 2:1) = $0D && data_data(i + j + 3:1) = $18 then
+                    # found WD service in ad packet, so connect
+                    # (32ms/48ms min/max interval, 1000ms timeout, 0 latency)
+                    call gap_connect_direct(sender(0:6), address_type, $20, $30, $100, 0)
+                    
+                    # change state
+                    state = STATE_CONNECTING
+                    call debug_print(15, "Connecting...\r\n")
+
+                    # set loop counters to 100 so we'll stop looking
+                    # (there is no "break" function in BGScript)
+                    i = 100
+                    j = 100
+                end if
+                j = j + 2
+            end while
+        end if
+        i = i + ad_field_length + 1
+    end while
+end
+
+event connection_status(connection, flags, address, address_type, conn_interval, timeout, latency, bonding)
+    if (flags & $05) = $05 then
+        # connection established
+        call debug_print(12, "Connected!\r\n")
+		
+		#if state = STATE_CONNECTING then
+			# start searching through service groups (UUID = 0x2800) to find WDID
+			call attclient_read_by_group_type(connection, $0001, $ffff, 2, "\x00\x28")
+
+			# change state
+			state = STATE_FINDING_WDID_SERVICE
+			call debug_print(17, "Finding wdid...\r\n")
+		#end if
+    end if
+end
+
+event attclient_group_found(connection, start_handle, end_handle, uuid_len, uuid_data)
+	if state = STATE_FINDING_WDID_SERVICE then
+		# found a service group, so check to see if it's the genericm access (0x1800)
+		if uuid_len = 2 && uuid_data(0:1) = $00 && uuid_data(1:1) = $18 then
+			# found it! save the handle range
+			att_handlesearch_start = start_handle
+			att_handlesearch_end = end_handle
+			call debug_print(31, "Found generic access service!\r\n")
+		end if
+	end if
+	if state = STATE_FINDING_SERVICES then
+		# found a service group, so check to see if it's the WD service (0x180D)
+		if uuid_len = 2 && uuid_data(0:1) = $0D && uuid_data(1:1) = $18 then
+			# found it! save the handle range
+			att_handlesearch_start = start_handle
+			att_handlesearch_end = end_handle
+			call debug_print(16, "Found service!\r\n")
+		end if
+	end if
+end
+
+event attclient_find_information_found(connection, chrhandle, uuid_len, uuid_data)
+    # found a descriptor, so check to see if it's wdid (0x2A8C), test result (0x2A40) or following CCC (0x2902)
+    if uuid_len = 2 && uuid_data(0:1) = $8C && uuid_data(1:1) = $2A then
+        # found the attribute, so save the handle
+        att_handle_wdid = chrhandle
+        call debug_print(20, "Found wdid handle!\r\n")
+    end if
+    if uuid_len = 2 && uuid_data(0:1) = $40 && uuid_data(1:1) = $2A then
+        # found the attribute, so save the handle
+        att_handle_measurement = chrhandle
+        call debug_print(27, "Found measurement handle!\r\n")
+    end if
+    if uuid_len = 2 && uuid_data(0:1) = $02 && uuid_data(1:1) = $29 && att_handle_measurement > 0 && att_handle_measurement_ccc = 0 then
+        # found client characteristic configuration for measurement attr, so save the handle
+        att_handle_measurement_ccc = chrhandle
+        call debug_print(31, "Found measurement CCC handle!\r\n")
+    end if
+end
+
+event attclient_procedure_completed(connection, result, chrhandle)
+    # finished some attclient operation, so figure out what happened
+    if state = STATE_FINDING_WDID_SERVICE then
+		if att_handlesearch_end > 0 then
+            # change state
+            state = STATE_FINDING_WDID_ATTRIBUTES
+            call debug_print(28, "Finding WDID attributes...\r\n")
+
+			# now find the wdid handle
+			call attclient_find_information(0, att_handlesearch_start, att_handlesearch_end)
+		else
+			# couldn't locate service with UUID 0x2AC3
+			call debug_print(29, "Couldn't find WDID service!\r\n")
+		end if
+    end if
+    if state = STATE_FINDING_WDID_ATTRIBUTES && chrhandle > att_handlesearch_start then
+        if att_handle_wdid > 0 then
+			att_handlesearch_start = 0
+			att_handlesearch_end = 0
+			# change state
+			state = STATE_FINDING_SERVICES
+			call debug_print(21, "Finding services...\r\n")
+			# start searching through service groups (UUID = 0x2800) to find WD service
+			call attclient_read_by_group_type(connection, $0001, $ffff, 2, "\x00\x28")
+        else
+            # couldn't locate test result characteristic with UUID 0x2AC3,
+            call debug_print(31, "Couldn't find wdid characteristic!\r\n")
+        end if
+    end if
+    if state = STATE_FINDING_SERVICES then
+        if att_handlesearch_end > 0 then
+            # change state
+            state = STATE_FINDING_ATTRIBUTES
+            call debug_print(23, "Finding attributes...\r\n")
+
+            # found WD service, so now find the handles
+            call attclient_find_information(0, att_handlesearch_start, att_handlesearch_end)
+        else
+            # couldn't locate service with UUID 0x180D
+            call debug_print(24, "Couldn't find service!\r\n")
+        end if
+    end if
+    if state = STATE_FINDING_ATTRIBUTES && chrhandle > att_handlesearch_start then
+        if att_handle_measurement_ccc > 0 then
+            # change state
+            state = STATE_LISTENING_MEASUREMENTS
+            call debug_print(26, "Awaiting measurements...\r\n")
+
+            # enable indications (write 0x01 to the handle)
+            call attclient_attribute_write(0, att_handle_measurement_ccc, 1, $01)
+        else
+            # couldn't locate test result characteristic with UUID 0x2A40,
+            call debug_print(31, "Couldn't find characteristic!\r\n")
+        end if
+    end if
+end
+
+event attclient_attribute_value(connection, atthandle, type, value_len, value_data)
+    # received a pushed value from the slave
+	
+	if atthandle = att_handle_wdid then
+		# get data
+		val_wdid = value_data(0:1)
+		result_report(0:1) = val_wdid
+		
+		call debug_print(6, "WDID: ")
+		call debug_print_byte(val_wdid)
+	end if
+	
+    if atthandle = att_handle_measurement then
+        # get data
+        val_passfail = value_data(0:1)
+		result_report(1:1) = val_passfail
+		
+		if val_wdid = 0 then
+			call debug_print(23, "Reading WDID value...\r\n")
+			# read wdid by handle
+			call attclient_read_by_handle(connection, att_handle_wdid)
+		else
+			call debug_print(6, "WDID: ")
+			call debug_print_byte(val_wdid)
+			call debug_print(8, "result: ")
+			call debug_print_byte(val_passfail)
+			if DEBUG_P = 0 then
+				call system_endpoint_tx(system_endpoint_uart1, 2, result_report(0:2))
+			end if
+		end if
+    end if
+end
+
+event connection_disconnected(handle, result)
+    # connection disconnected, start scanning again
+    call debug_print(15, "Disconnected!\r\n")
+    call gap_discover(gap_discover_generic)
+    
+    # change state
+    state = STATE_SCANNING
+    call debug_print(13, "Scanning...\r\n")
+end
