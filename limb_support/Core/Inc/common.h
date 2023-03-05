@@ -13,30 +13,30 @@
 
 typedef struct _DATA_RECORD
 {
-    uint32_t index;
-    uint16_t adc[4];
-    uint16_t accel[6];
-    uint16_t gyro[6];
+    char index_and_data[110];			// index 13 bytes, one comma, plus 16 signed integer with comma (16 bit), "+/-32767,", min 96 bytes, max 112 bytes
+    char padding_and_line_ending[18];	// 16 bytes padding with ' ', last 2 bytes for "\r\n"
 } DATA_RECORD;
 
 typedef struct _SD_PAGE
 {
-	DATA_RECORD data[7];
-    uint16_t spare[2];
+	DATA_RECORD data_record_buffer[4];
 } SD_PAGE;
 
-void increaseCounter();
-uint8_t isCounterUnchanged();
+void pad_buf(DATA_RECORD *_data_record_buffer);
 
-GPIO_PinState readKey0();
-GPIO_PinState readKey1();
-GPIO_PinState readExtSw();
-void writeLed0(GPIO_PinState state);
-void writeLed1(GPIO_PinState state);
-void writeExtLed(GPIO_PinState state);
+uint32_t get_counter();
+void increase_counter();
+uint8_t is_counter_unchanged();
 
-void startAdc(ADC_HandleTypeDef* hadc, uint32_t channel);
-uint32_t readAdc(ADC_HandleTypeDef* hadc);
+GPIO_PinState read_key0();
+GPIO_PinState read_key1();
+GPIO_PinState read_ext_sw();
+void write_LED0(GPIO_PinState state);
+void write_LED1(GPIO_PinState state);
+void write_LEDExt(GPIO_PinState state);
+
+void srat_ADC(ADC_HandleTypeDef* hadc, uint32_t channel);
+uint32_t read_ADC(ADC_HandleTypeDef* hadc);
 
 /* Accelerometer full scale range */
 enum mpu_accel_range

@@ -22,6 +22,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdio.h>
 #include "common.h"
 /* USER CODE END Includes */
 
@@ -45,13 +46,24 @@ ADC_HandleTypeDef hadc2;
 
 I2C_HandleTypeDef hi2c2;
 
+SD_HandleTypeDef hsd;
+
 TIM_HandleTypeDef htim4;
 
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-SD_PAGE sd_page;
-
+SD_PAGE sd_page_w1;
+SD_PAGE sd_page_w2;
+SD_PAGE sd_page_rd;
+SD_PAGE* old_buf = &sd_page_w1;
+SD_PAGE* new_buf = &sd_page_w2;
+SD_PAGE* read_buf = &sd_page_rd;
+const char* FIRST_LINE = "----index----,ana_1,ana_2,ana_3,ana_4,acc1x,acc1y,acc1z,gyro1x,gyro1y,gyro1z,acc1x,acc1y,acc1z,gyro1x,gyro1y,gyro1z,";
+HAL_StatusTypeDef sd_op_res = HAL_OK;
+HAL_SD_CardStateTypeDef sd_card_state;
+uint32_t sd_block_address = 0;
+uint32_t two_ms_counter = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -62,6 +74,7 @@ static void MX_I2C2_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_ADC2_Init(void);
+static void MX_SDIO_SD_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -104,50 +117,94 @@ int main(void)
   MX_USART1_UART_Init();
   MX_TIM4_Init();
   MX_ADC2_Init();
+  MX_SDIO_SD_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start_IT(&htim4);
   // Calibrate The ADC On Power-Up For Better Accuracy
   HAL_ADCEx_Calibration_Start(&hadc1);
-  mpu_init(&hi2c2, IMU_U_I2C_ADDR_SHIFTED);
-  mpu_init(&hi2c2, IMU_L_I2C_ADDR_SHIFTED);
-  uint32_t size = sizeof(sd_page);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
+  two_ms_counter = get_counter();
+  memset(&old_buf->data_record_buffer[0], ' ', 110);
+  pad_buf(&old_buf->data_record_buffer[0]);
+  int32_t print_pos = sprintf(old_buf->data_record_buffer[0].index_and_data, "%13ld, STM32 Board init done.", two_ms_counter);
+  old_buf->data_record_buffer[0].index_and_data[print_pos] = ' ';
+  mpu_init(&hi2c2, IMU_U_I2C_ADDR_SHIFTED);
+  mpu_init(&hi2c2, IMU_L_I2C_ADDR_SHIFTED);
+  two_ms_counter = get_counter();
+  memset(&old_buf->data_record_buffer[1], ' ', 110);
+  pad_buf(&old_buf->data_record_buffer[1]);
+  print_pos = sprintf(old_buf->data_record_buffer[1].index_and_data, "%13ld, MPU6050 init done.", two_ms_counter);
+  old_buf->data_record_buffer[1].index_and_data[print_pos] = ' ';
+
+  uint32_t sd_page_size = sizeof(SD_PAGE);
+  sd_card_state = HAL_SD_GetCardState(&hsd);
+  while(sd_card_state != HAL_SD_CARD_TRANSFER) {
+    sd_card_state = HAL_SD_GetCardState(&hsd);
+  }
+  HAL_SD_CardInfoTypeDef sd_card_info;
+  sd_op_res = HAL_SD_GetCardInfo(&hsd, &sd_card_info);
+  sd_op_res = HAL_SD_Erase(&hsd, 0, sd_card_info.BlockNbr - 1);
+  two_ms_counter = get_counter();
+  memset(&old_buf->data_record_buffer[2], ' ', 110);
+  pad_buf(&old_buf->data_record_buffer[2]);
+  print_pos = sprintf(old_buf->data_record_buffer[1].index_and_data, "%13ld, SD Card init done. Block size %u, block number %u",
+		  two_ms_counter, sd_card_info.BlockSize, sd_card_info.BlockNbr);
+  old_buf->data_record_buffer[2].index_and_data[print_pos] = ' ';
+  pad_buf(&old_buf->data_record_buffer[3]);
+  sprintf(old_buf->data_record_buffer[3].index_and_data, FIRST_LINE);
+  sd_card_state = HAL_SD_GetCardState(&hsd);
+  while(sd_card_state != HAL_SD_CARD_TRANSFER) {
+    sd_card_state = HAL_SD_GetCardState(&hsd);
+  }
+  sd_op_res = HAL_SD_WriteBlocks(&hsd, old_buf, sd_block_address++, 1, 1);
+
+  while (sd_block_address < sd_card_info.BlockNbr)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	startAdc(&hadc1, ADC_CHANNEL_1);	// PA1
-	startAdc(&hadc2, ADC_CHANNEL_2);	// PA2
-	writeLed0(readKey0());
-	uint32_t ADC_PA1 = readAdc(&hadc1);
-	uint32_t ADC_PA2 = readAdc(&hadc2);
-	startAdc(&hadc1, ADC_CHANNEL_3);	// PA3
-	startAdc(&hadc2, ADC_CHANNEL_4);	// PA4
-	uint32_t ADC_PA3 = readAdc(&hadc1);
-	uint32_t ADC_PA4 = readAdc(&hadc2);
-	startAdc(&hadc1, ADC_CHANNEL_7);	// PA7
-	uint32_t ADC_PA7 = readAdc(&hadc1);
-	/*
-	uint8_t buf_imu_u_accel[6], buf_imu_u_gyro[6];
-	mpu_get_accel_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, buf_imu_u_accel);
-	mpu_get_gyro_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, buf_imu_u_gyro);
-	uint8_t buf_imu_l_accel[6], buf_imu_l_gyro[6];
-	mpu_get_accel_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, buf_imu_l_accel);
-	mpu_get_gyro_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, buf_imu_l_gyro);
-	uint8_t buf_offset[6];
-	mpu_get_accel_offset_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, buf_offset);
-	mpu_get_gyro_offset_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, buf_offset);
-	mpu_get_accel_offset_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, buf_offset);
-	mpu_get_gyro_offset_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, buf_offset);
-	*/
-	while (isCounterUnchanged()) {
-		writeLed1(GPIO_PIN_SET);
-	}
-	writeLed1(GPIO_PIN_RESET);
+    two_ms_counter = get_counter();
+
+    sd_card_state = HAL_SD_GetCardState(&hsd);
+    while(sd_card_state != HAL_SD_CARD_TRANSFER) {
+      sd_card_state = HAL_SD_GetCardState(&hsd);
+    }
+    sd_op_res = HAL_SD_ReadBlocks(&hsd, read_buf, sd_block_address - 1, 1, 1);
+    if (memcmp(old_buf, read_buf, 512) != 0) {
+      Error_Handler();
+    }
+    srat_ADC(&hadc1, ADC_CHANNEL_1);	// PA1
+    srat_ADC(&hadc2, ADC_CHANNEL_2);	// PA2
+    write_LED0(read_key0());
+    uint32_t ADC_PA1 = read_ADC(&hadc1);
+    uint32_t ADC_PA2 = read_ADC(&hadc2);
+    srat_ADC(&hadc1, ADC_CHANNEL_3);	// PA3
+    srat_ADC(&hadc2, ADC_CHANNEL_4);	// PA4
+    uint32_t ADC_PA3 = read_ADC(&hadc1);
+    uint32_t ADC_PA4 = read_ADC(&hadc2);
+    srat_ADC(&hadc1, ADC_CHANNEL_7);	// PA7
+    uint32_t ADC_PA7 = read_ADC(&hadc1);
+    /*
+    uint8_t buf_imu_u_accel[6], buf_imu_u_gyro[6];
+    mpu_get_accel_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, buf_imu_u_accel);
+    mpu_get_gyro_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, buf_imu_u_gyro);
+    uint8_t buf_imu_l_accel[6], buf_imu_l_gyro[6];
+    mpu_get_accel_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, buf_imu_l_accel);
+    mpu_get_gyro_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, buf_imu_l_gyro);
+    uint8_t buf_offset[6];
+    mpu_get_accel_offset_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, buf_offset);
+    mpu_get_gyro_offset_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, buf_offset);
+    mpu_get_accel_offset_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, buf_offset);
+    mpu_get_gyro_offset_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, buf_offset);
+    */
+    while (is_counter_unchanged()) {
+      write_LED1(GPIO_PIN_SET);
+    }
+    write_LED1(GPIO_PIN_RESET);
   }
   /* USER CODE END 3 */
 }
@@ -302,7 +359,7 @@ static void MX_I2C2_Init(void)
 
   /* USER CODE END I2C2_Init 1 */
   hi2c2.Instance = I2C2;
-  hi2c2.Init.ClockSpeed = 100000;
+  hi2c2.Init.ClockSpeed = 400000;
   hi2c2.Init.DutyCycle = I2C_DUTYCYCLE_2;
   hi2c2.Init.OwnAddress1 = 0;
   hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
@@ -317,6 +374,42 @@ static void MX_I2C2_Init(void)
   /* USER CODE BEGIN I2C2_Init 2 */
 
   /* USER CODE END I2C2_Init 2 */
+
+}
+
+/**
+  * @brief SDIO Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SDIO_SD_Init(void)
+{
+
+  /* USER CODE BEGIN SDIO_Init 0 */
+
+  /* USER CODE END SDIO_Init 0 */
+
+  /* USER CODE BEGIN SDIO_Init 1 */
+
+  /* USER CODE END SDIO_Init 1 */
+  hsd.Instance = SDIO;
+  hsd.Init.ClockEdge = SDIO_CLOCK_EDGE_RISING;
+  hsd.Init.ClockBypass = SDIO_CLOCK_BYPASS_DISABLE;
+  hsd.Init.ClockPowerSave = SDIO_CLOCK_POWER_SAVE_DISABLE;
+  hsd.Init.BusWide = SDIO_BUS_WIDE_1B;
+  hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
+  hsd.Init.ClockDiv = 0;
+  if (HAL_SD_Init(&hsd) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_SD_ConfigWideBusOperation(&hsd, SDIO_BUS_WIDE_4B) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SDIO_Init 2 */
+
+  /* USER CODE END SDIO_Init 2 */
 
 }
 
@@ -411,6 +504,8 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5, GPIO_PIN_RESET);

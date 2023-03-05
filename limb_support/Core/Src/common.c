@@ -11,30 +11,25 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-unsigned int counterValue = 0;
-unsigned int counterOldValue = 0;
-
-void increaseCounter() {
-	counterValue++;
+const char PADDING_AND_LINE_ENDING[18] = "                \r\n";
+inline void pad_buf(DATA_RECORD *_data_record_buffer) {
+	memcpy(_data_record_buffer->padding_and_line_ending, PADDING_AND_LINE_ENDING, sizeof(PADDING_AND_LINE_ENDING));
 }
 
-uint8_t isCounterUnchanged() {
-	if (counterOldValue == counterValue) {
-		return 1;
-	} else {
-		counterOldValue = counterValue;
-		return 0;
-	}
-}
+uint32_t counterValue = 0;
+uint32_t counterOldValue = 0;
+inline uint32_t get_counter() { return counterValue; }
+inline void increase_counter() { counterValue++; }
+inline uint8_t is_counter_unchanged() { return (counterOldValue == counterValue) ? 1 : 0; }
 
-GPIO_PinState readKey0() { return HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_4); }
-GPIO_PinState readKey1() { return HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_3); }
-GPIO_PinState readExtSw() { return HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_14); }
-void writeLed0(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, state); }
-void writeLed1(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5, state); }
-void writeExtLed(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, state); }
+inline GPIO_PinState read_key0() { return HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_4); }
+inline GPIO_PinState read_key1() { return HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_3); }
+inline GPIO_PinState read_ext_sw() { return HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_14); }
+inline void write_LED0(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, state); }
+inline void write_LED1(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5, state); }
+inline void write_LEDExt(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, state); }
 
-void startAdc(ADC_HandleTypeDef* hadc, uint32_t channel) {
+void srat_ADC(ADC_HandleTypeDef* hadc, uint32_t channel) {
 	ADC_ChannelConfTypeDef sConfig = {0};
 	sConfig.Channel = channel;
 	sConfig.Rank = ADC_REGULAR_RANK_1;
@@ -44,14 +39,14 @@ void startAdc(ADC_HandleTypeDef* hadc, uint32_t channel) {
 	HAL_ADC_Start(hadc);
 }
 
-uint32_t readAdc(ADC_HandleTypeDef* hadc) {
+uint32_t read_ADC(ADC_HandleTypeDef* hadc) {
 	HAL_ADC_PollForConversion(hadc, 1);
 	return HAL_ADC_GetValue(hadc);
 }
 /*
 HAL_StatusTypeDef i2c_write_reg(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t reg, uint8_t data) {
 	uint8_t tx_buf[2] = {reg, data};
-	return HAL_I2C_Master_Transmit(hi2c, i2c_addr, tx_buf, 2, 5);
+	return HAL_I2C_Master_Transmit(hi2c, i2c_addr, tx_buf, 2, 1);
 }
 
 HAL_StatusTypeDef i2c_read_regs(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t reg, uint8_t len, uint8_t *buf) {
@@ -61,22 +56,22 @@ HAL_StatusTypeDef i2c_read_regs(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8
 
 		reg |= 0x40; // Add autoincrement bit
 	}
-	HAL_StatusTypeDef res = HAL_I2C_Master_Transmit(hi2c, i2c_addr, &reg, 1, 5);
+	HAL_StatusTypeDef res = HAL_I2C_Master_Transmit(hi2c, i2c_addr, &reg, 1, 1);
 	if (res != HAL_OK) {
 		return res;
 	}
-	return HAL_I2C_Master_Receive(hi2c, i2c_addr, buf, len, 5);
+	return HAL_I2C_Master_Receive(hi2c, i2c_addr, buf, len, 1);
 }
 
 AL_I2C_IsDeviceReady
 */
 
 HAL_StatusTypeDef i2c_write_reg(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t reg, uint8_t data) {
-	return HAL_I2C_Mem_Write(hi2c, i2c_addr, reg, I2C_MEMADD_SIZE_8BIT, &data, 1, 10);
+	return HAL_I2C_Mem_Write(hi2c, i2c_addr, reg, I2C_MEMADD_SIZE_8BIT, &data, 1, 1);
 }
 
 HAL_StatusTypeDef i2c_read_regs(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t reg, uint8_t len, uint8_t *buffer) {
-	return HAL_I2C_Mem_Read(hi2c, i2c_addr, reg, I2C_MEMADD_SIZE_8BIT, buffer, len, 10);
+	return HAL_I2C_Mem_Read(hi2c, i2c_addr, reg, I2C_MEMADD_SIZE_8BIT, buffer, len, 1);
 }
 
 HAL_StatusTypeDef mpu_get_accel_buf(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t *buffer) {
@@ -242,6 +237,8 @@ HAL_StatusTypeDef mpu_init(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr)
     res += mpu_set_param(hi2c, i2c_addr, MPU6XXX_GYRO_RANGE, MPU6XXX_GYRO_RANGE_250DPS);
     res += mpu_set_param(hi2c, i2c_addr, MPU6XXX_ACCEL_RANGE, MPU6XXX_ACCEL_RANGE_2G);
     res += mpu_set_param(hi2c, i2c_addr, MPU6XXX_SLEEP, MPU6XXX_SLEEP_DISABLE);
+    res += mpu_set_param(hi2c, i2c_addr, MPU6XXX_DLPF_CONFIG,MPU6XXX_DLPF_DISABLE);
+    res += mpu_set_param(hi2c, i2c_addr, MPU6XXX_SAMPLE_RATE,8000);
 
     return res;
 }
