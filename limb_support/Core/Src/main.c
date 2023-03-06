@@ -34,7 +34,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-// #define SD_CARD_READ_ENABLED 1
+#define SD_CARD_READ_ENABLED 1
 #define SD_CARD_WRITE_ENABLED 1
 /* USER CODE END PD */
 
@@ -57,6 +57,8 @@ TIM_HandleTypeDef htim4;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
+ERROR_STATE error_state = NO_ERROR;
+
 SD_PAGE sd_page_w1;
 SD_PAGE sd_page_w2;
 SD_PAGE* old_buf = &sd_page_w1;
@@ -149,8 +151,9 @@ int main(void)
     srat_ADC(&hadc1, ADC_CHANNEL_7);	// PA7
     uint32_t ADC_PA7 = read_ADC(&hadc1);
 #ifdef SD_CARD_READ_ENABLED
-    wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
+    wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
     sd_op_res = HAL_SD_ReadBlocks_DMA(&hsd, (uint8_t *)read_buf, sd_block_address - 1, 1);
+    wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
     if (memcmp(old_buf, read_buf, 512) != 0) {
       Error_Handler();
     }
@@ -538,11 +541,9 @@ uint8_t user_init() {
   mpu_init(&hi2c2, IMU_L_I2C_ADDR_SHIFTED);
   sd_page_print(old_buf, 1, "MPU6050 init done.");
 #ifdef SD_CARD_WRITE_ENABLED
-  wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
   sd_op_res = HAL_SD_GetCardInfo(&hsd, &sd_card_info);
-
-  wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
   sd_op_res = HAL_SD_Erase(&hsd, 0, sd_card_info.BlockNbr - 1);
+  wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
 
   char tmp_buf[110];
   snprintf(tmp_buf, sizeof(tmp_buf), "SD Card block size %lu, block number %lu",
@@ -550,8 +551,9 @@ uint8_t user_init() {
   sd_page_print(old_buf, 2, tmp_buf);
   sd_page_print_header(old_buf, 3);
 
-  wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
+  wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
   sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)old_buf, sd_block_address++, 1);
+  wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
   return sd_block_address < sd_card_info.BlockNbr ? 1 : 0;
 #else
   return 1;
@@ -570,6 +572,13 @@ void Error_Handler(void)
   __disable_irq();
   while (1)
   {
+    switch (error_state) {
+    case NO_SD_CARD:
+      LEDExt_flash_fast();
+    case NO_ERROR:
+    default:
+      ;
+    }
   }
   /* USER CODE END Error_Handler_Debug */
 }

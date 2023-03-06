@@ -41,7 +41,13 @@ void wait_for_sd_card_state(SD_HandleTypeDef* hsd, HAL_SD_CardStateTypeDef expec
   HAL_SD_CardStateTypeDef sd_card_state = HAL_SD_GetCardState(hsd);
   while(sd_card_state != expected_state) {
     sd_card_state = HAL_SD_GetCardState(hsd);
-    write_LEDExt(((get_counter() & 0x0100) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
+    LEDExt_flash_slow();
+  }
+}
+
+void wait_for_sdio_state(SD_HandleTypeDef* hsd, HAL_SD_StateTypeDef expected_state) {
+  while(hsd->State != expected_state) {
+    LEDExt_flash_slow();
   }
 }
 
@@ -58,6 +64,15 @@ inline GPIO_PinState read_ext_sw() { return HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_14)
 inline void write_LED0(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, state); }
 inline void write_LED1(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5, state); }
 inline void write_LEDExt(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, state); }
+inline void LEDExt_flash_slow() { // ~ 1024 ms
+  write_LEDExt(((get_counter() & 0x0100) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
+}
+inline void LEDExt_flash() { // ~ 512 ms
+  write_LEDExt(((get_counter() & 0x0080) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
+}
+inline void LEDExt_flash_fast() { // ~ 256 ms
+  write_LEDExt(((get_counter() & 0x0040) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
+}
 
 void srat_ADC(ADC_HandleTypeDef* hadc, uint32_t channel) {
 	ADC_ChannelConfTypeDef sConfig = {0};

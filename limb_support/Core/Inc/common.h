@@ -11,6 +11,12 @@
 #include "stm32f1xx_hal.h"
 #include "mpu6xxx_reg.h"
 
+typedef enum _ERROR_STATE
+{
+    NO_ERROR = 0,
+    NO_SD_CARD  = 1
+} ERROR_STATE;
+
 typedef struct _DATA_RECORD
 {
     char index_and_data[110];			// index 13 bytes, one comma, plus 16 signed integer with comma (16 bit), "+/-32767,", min 96 bytes, max 112 bytes
@@ -24,6 +30,7 @@ typedef struct _SD_PAGE
 
 void pad_buf(DATA_RECORD *_data_record_buffer);
 void wait_for_sd_card_state(SD_HandleTypeDef* hsd, HAL_SD_CardStateTypeDef expected_state);
+void wait_for_sdio_state(SD_HandleTypeDef* hsd, HAL_SD_StateTypeDef expected_state);
 void sd_page_print(SD_PAGE* page, uint8_t record_index, char* info);
 void sd_page_print_header(SD_PAGE* page, uint8_t record_index);
 
@@ -38,6 +45,9 @@ GPIO_PinState read_ext_sw();
 void write_LED0(GPIO_PinState state);
 void write_LED1(GPIO_PinState state);
 void write_LEDExt(GPIO_PinState state);
+void LEDExt_flash_slow(); // ~ 1024 ms
+void LEDExt_flash(); // ~ 512 ms
+void LEDExt_flash_fast(); // ~ 256 ms
 
 void srat_ADC(ADC_HandleTypeDef* hadc, uint32_t channel);
 uint32_t read_ADC(ADC_HandleTypeDef* hadc);
