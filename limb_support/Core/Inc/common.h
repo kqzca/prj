@@ -23,8 +23,12 @@ typedef struct _SD_PAGE
 } SD_PAGE;
 
 void pad_buf(DATA_RECORD *_data_record_buffer);
+void wait_for_sd_card_state(SD_HandleTypeDef* hsd, HAL_SD_CardStateTypeDef expected_state);
+void sd_page_print(SD_PAGE* page, uint8_t record_index, char* info);
+void sd_page_print_header(SD_PAGE* page, uint8_t record_index);
 
 uint32_t get_counter();
+void sync_counter();
 void increase_counter();
 uint8_t is_counter_unchanged();
 

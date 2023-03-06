@@ -24,6 +24,7 @@
 /* USER CODE BEGIN Includes */
 
 /* USER CODE END Includes */
+extern DMA_HandleTypeDef hdma_sdio;
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN TD */
@@ -287,6 +288,28 @@ void HAL_SD_MspInit(SD_HandleTypeDef* hsd)
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
+    /* SDIO DMA Init */
+    /* SDIO Init */
+    hdma_sdio.Instance = DMA2_Channel4;
+    hdma_sdio.Init.Direction = DMA_MEMORY_TO_PERIPH;
+    hdma_sdio.Init.PeriphInc = DMA_PINC_DISABLE;
+    hdma_sdio.Init.MemInc = DMA_MINC_ENABLE;
+    hdma_sdio.Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;
+    hdma_sdio.Init.MemDataAlignment = DMA_MDATAALIGN_WORD;
+    hdma_sdio.Init.Mode = DMA_NORMAL;
+    hdma_sdio.Init.Priority = DMA_PRIORITY_LOW;
+    if (HAL_DMA_Init(&hdma_sdio) != HAL_OK)
+    {
+      Error_Handler();
+    }
+
+    /* Several peripheral DMA handle pointers point to the same DMA handle.
+     Be aware that there is only one channel to perform all the requested DMAs. */
+    /* Be sure to change transfer direction before calling
+     HAL_SD_ReadBlocks_DMA or HAL_SD_WriteBlocks_DMA. */
+    __HAL_LINKDMA(hsd,hdmarx,hdma_sdio);
+    __HAL_LINKDMA(hsd,hdmatx,hdma_sdio);
+
   /* USER CODE BEGIN SDIO_MspInit 1 */
 
   /* USER CODE END SDIO_MspInit 1 */
@@ -323,6 +346,9 @@ void HAL_SD_MspDeInit(SD_HandleTypeDef* hsd)
 
     HAL_GPIO_DeInit(GPIOD, GPIO_PIN_2);
 
+    /* SDIO DMA DeInit */
+    HAL_DMA_DeInit(hsd->hdmarx);
+    HAL_DMA_DeInit(hsd->hdmatx);
   /* USER CODE BEGIN SDIO_MspDeInit 1 */
 
   /* USER CODE END SDIO_MspDeInit 1 */

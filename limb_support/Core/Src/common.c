@@ -10,15 +10,45 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
 
+const size_t MAX_DATA_RECORD_LENGTH = 126;
 const char PADDING_AND_LINE_ENDING[18] = "                \r\n";
 inline void pad_buf(DATA_RECORD *_data_record_buffer) {
 	memcpy(_data_record_buffer->padding_and_line_ending, PADDING_AND_LINE_ENDING, sizeof(PADDING_AND_LINE_ENDING));
 }
 
+void sd_page_print(SD_PAGE* page, uint8_t record_index, char* info) {
+  if ((page == 0) || (record_index > 3)) {
+    return;
+  }
+  memset(&page->data_record_buffer[record_index], ' ', 110);
+  pad_buf(&page->data_record_buffer[record_index]);
+  int32_t print_pos = snprintf(page->data_record_buffer[record_index].index_and_data, MAX_DATA_RECORD_LENGTH,
+      "%13ld,%s", get_counter(), info);
+  page->data_record_buffer[record_index].index_and_data[print_pos] = ' ';
+}
+
+void sd_page_print_header(SD_PAGE* page, uint8_t record_index) {
+  const char* TABLE_HEADER = "----index----,ana_1,ana_2,ana_3,ana_4,acc1x,acc1y,acc1z,gyro1x,gyro1y,gyro1z,acc1x,acc1y,acc1z,gyro1x,gyro1y,gyro1z,";
+  pad_buf(&page->data_record_buffer[record_index]);
+  size_t table_header_length = strlen(TABLE_HEADER);
+  memcpy(page->data_record_buffer[record_index].index_and_data, TABLE_HEADER,
+      (table_header_length <= MAX_DATA_RECORD_LENGTH) ? table_header_length : MAX_DATA_RECORD_LENGTH);
+}
+
+void wait_for_sd_card_state(SD_HandleTypeDef* hsd, HAL_SD_CardStateTypeDef expected_state) {
+  HAL_SD_CardStateTypeDef sd_card_state = HAL_SD_GetCardState(hsd);
+  while(sd_card_state != expected_state) {
+    sd_card_state = HAL_SD_GetCardState(hsd);
+    write_LEDExt(((get_counter() & 0x0100) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
+  }
+}
+
 uint32_t counterValue = 0;
 uint32_t counterOldValue = 0;
 inline uint32_t get_counter() { return counterValue; }
+inline void sync_counter() { counterOldValue = counterValue; }
 inline void increase_counter() { counterValue++; }
 inline uint8_t is_counter_unchanged() { return (counterOldValue == counterValue) ? 1 : 0; }
 

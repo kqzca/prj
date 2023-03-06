@@ -23,6 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include <string.h>
 #include "common.h"
 /* USER CODE END Includes */
 
@@ -33,6 +34,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+// #define SD_CARD_READ_ENABLED 1
+#define SD_CARD_WRITE_ENABLED 1
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -47,6 +50,7 @@ ADC_HandleTypeDef hadc2;
 I2C_HandleTypeDef hi2c2;
 
 SD_HandleTypeDef hsd;
+DMA_HandleTypeDef hdma_sdio;
 
 TIM_HandleTypeDef htim4;
 
@@ -55,15 +59,12 @@ UART_HandleTypeDef huart1;
 /* USER CODE BEGIN PV */
 SD_PAGE sd_page_w1;
 SD_PAGE sd_page_w2;
-SD_PAGE sd_page_rd;
 SD_PAGE* old_buf = &sd_page_w1;
 SD_PAGE* new_buf = &sd_page_w2;
-SD_PAGE* read_buf = &sd_page_rd;
-const char* FIRST_LINE = "----index----,ana_1,ana_2,ana_3,ana_4,acc1x,acc1y,acc1z,gyro1x,gyro1y,gyro1z,acc1x,acc1y,acc1z,gyro1x,gyro1y,gyro1z,";
-HAL_StatusTypeDef sd_op_res = HAL_OK;
-HAL_SD_CardStateTypeDef sd_card_state;
+char read_buf[1024];
 uint32_t sd_block_address = 0;
-uint32_t two_ms_counter = 0;
+HAL_SD_CardInfoTypeDef sd_card_info;
+HAL_StatusTypeDef sd_op_res;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -74,9 +75,10 @@ static void MX_I2C2_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_ADC2_Init(void);
+static void MX_DMA_Init(void);
 static void MX_SDIO_SD_Init(void);
 /* USER CODE BEGIN PFP */
-
+static uint8_t user_init();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -117,6 +119,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_TIM4_Init();
   MX_ADC2_Init();
+  MX_DMA_Init();
   MX_SDIO_SD_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start_IT(&htim4);
@@ -127,56 +130,13 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  two_ms_counter = get_counter();
-  memset(&old_buf->data_record_buffer[0], ' ', 110);
-  pad_buf(&old_buf->data_record_buffer[0]);
-  int32_t print_pos = sprintf(old_buf->data_record_buffer[0].index_and_data, "%13ld, STM32 Board init done.", two_ms_counter);
-  old_buf->data_record_buffer[0].index_and_data[print_pos] = ' ';
-  mpu_init(&hi2c2, IMU_U_I2C_ADDR_SHIFTED);
-  mpu_init(&hi2c2, IMU_L_I2C_ADDR_SHIFTED);
-  two_ms_counter = get_counter();
-  memset(&old_buf->data_record_buffer[1], ' ', 110);
-  pad_buf(&old_buf->data_record_buffer[1]);
-  print_pos = sprintf(old_buf->data_record_buffer[1].index_and_data, "%13ld, MPU6050 init done.", two_ms_counter);
-  old_buf->data_record_buffer[1].index_and_data[print_pos] = ' ';
-
-  uint32_t sd_page_size = sizeof(SD_PAGE);
-  sd_card_state = HAL_SD_GetCardState(&hsd);
-  while(sd_card_state != HAL_SD_CARD_TRANSFER) {
-    sd_card_state = HAL_SD_GetCardState(&hsd);
-  }
-  HAL_SD_CardInfoTypeDef sd_card_info;
-  sd_op_res = HAL_SD_GetCardInfo(&hsd, &sd_card_info);
-  sd_op_res = HAL_SD_Erase(&hsd, 0, sd_card_info.BlockNbr - 1);
-  two_ms_counter = get_counter();
-  memset(&old_buf->data_record_buffer[2], ' ', 110);
-  pad_buf(&old_buf->data_record_buffer[2]);
-  print_pos = sprintf(old_buf->data_record_buffer[1].index_and_data, "%13ld, SD Card init done. Block size %u, block number %u",
-		  two_ms_counter, sd_card_info.BlockSize, sd_card_info.BlockNbr);
-  old_buf->data_record_buffer[2].index_and_data[print_pos] = ' ';
-  pad_buf(&old_buf->data_record_buffer[3]);
-  sprintf(old_buf->data_record_buffer[3].index_and_data, FIRST_LINE);
-  sd_card_state = HAL_SD_GetCardState(&hsd);
-  while(sd_card_state != HAL_SD_CARD_TRANSFER) {
-    sd_card_state = HAL_SD_GetCardState(&hsd);
-  }
-  sd_op_res = HAL_SD_WriteBlocks(&hsd, old_buf, sd_block_address++, 1, 1);
-
-  while (sd_block_address < sd_card_info.BlockNbr)
+  uint8_t keep_going = user_init();
+  while (keep_going)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    two_ms_counter = get_counter();
-
-    sd_card_state = HAL_SD_GetCardState(&hsd);
-    while(sd_card_state != HAL_SD_CARD_TRANSFER) {
-      sd_card_state = HAL_SD_GetCardState(&hsd);
-    }
-    sd_op_res = HAL_SD_ReadBlocks(&hsd, read_buf, sd_block_address - 1, 1, 1);
-    if (memcmp(old_buf, read_buf, 512) != 0) {
-      Error_Handler();
-    }
+    sync_counter();
     srat_ADC(&hadc1, ADC_CHANNEL_1);	// PA1
     srat_ADC(&hadc2, ADC_CHANNEL_2);	// PA2
     write_LED0(read_key0());
@@ -188,6 +148,13 @@ int main(void)
     uint32_t ADC_PA4 = read_ADC(&hadc2);
     srat_ADC(&hadc1, ADC_CHANNEL_7);	// PA7
     uint32_t ADC_PA7 = read_ADC(&hadc1);
+#ifdef SD_CARD_READ_ENABLED
+    wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
+    sd_op_res = HAL_SD_ReadBlocks_DMA(&hsd, (uint8_t *)read_buf, sd_block_address - 1, 1);
+    if (memcmp(old_buf, read_buf, 512) != 0) {
+      Error_Handler();
+    }
+#endif
     /*
     uint8_t buf_imu_u_accel[6], buf_imu_u_gyro[6];
     mpu_get_accel_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, buf_imu_u_accel);
@@ -227,7 +194,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI_DIV2;
-  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL9;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL12;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -238,7 +205,7 @@ void SystemClock_Config(void)
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
@@ -359,7 +326,7 @@ static void MX_I2C2_Init(void)
 
   /* USER CODE END I2C2_Init 1 */
   hi2c2.Instance = I2C2;
-  hi2c2.Init.ClockSpeed = 400000;
+  hi2c2.Init.ClockSpeed = 100000;
   hi2c2.Init.DutyCycle = I2C_DUTYCYCLE_2;
   hi2c2.Init.OwnAddress1 = 0;
   hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
@@ -398,7 +365,7 @@ static void MX_SDIO_SD_Init(void)
   hsd.Init.ClockPowerSave = SDIO_CLOCK_POWER_SAVE_DISABLE;
   hsd.Init.BusWide = SDIO_BUS_WIDE_1B;
   hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
-  hsd.Init.ClockDiv = 0;
+  hsd.Init.ClockDiv = 4;
   if (HAL_SD_Init(&hsd) != HAL_OK)
   {
     Error_Handler();
@@ -492,6 +459,22 @@ static void MX_USART1_UART_Init(void)
 }
 
 /**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA2_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA2_Channel4_5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Channel4_5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Channel4_5_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -549,7 +532,31 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+uint8_t user_init() {
+  sd_page_print(old_buf, 0, "STM32 Board init done.");
+  mpu_init(&hi2c2, IMU_U_I2C_ADDR_SHIFTED);
+  mpu_init(&hi2c2, IMU_L_I2C_ADDR_SHIFTED);
+  sd_page_print(old_buf, 1, "MPU6050 init done.");
+#ifdef SD_CARD_WRITE_ENABLED
+  wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
+  sd_op_res = HAL_SD_GetCardInfo(&hsd, &sd_card_info);
 
+  wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
+  sd_op_res = HAL_SD_Erase(&hsd, 0, sd_card_info.BlockNbr - 1);
+
+  char tmp_buf[110];
+  snprintf(tmp_buf, sizeof(tmp_buf), "SD Card block size %lu, block number %lu",
+      sd_card_info.BlockSize, sd_card_info.BlockNbr);
+  sd_page_print(old_buf, 2, tmp_buf);
+  sd_page_print_header(old_buf, 3);
+
+  wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
+  sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)old_buf, sd_block_address++, 1);
+  return sd_block_address < sd_card_info.BlockNbr ? 1 : 0;
+#else
+  return 1;
+#endif
+}
 /* USER CODE END 4 */
 
 /**
