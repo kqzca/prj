@@ -18,7 +18,7 @@ inline void pad_buf(DATA_RECORD *_data_record_buffer) {
 	memcpy(_data_record_buffer->padding_and_line_ending, PADDING_AND_LINE_ENDING, sizeof(PADDING_AND_LINE_ENDING));
 }
 
-void sd_page_print(SD_PAGE* page, uint8_t record_index, char* info) {
+void sd_page_print(SD_PAGE *page, uint8_t record_index, char *info) {
   if ((page == 0) || (record_index > 3)) {
     return;
   }
@@ -29,15 +29,15 @@ void sd_page_print(SD_PAGE* page, uint8_t record_index, char* info) {
   page->data_record_buffer[record_index].index_and_data[print_pos] = ' ';
 }
 
-void sd_page_print_header(SD_PAGE* page, uint8_t record_index) {
-  const char* TABLE_HEADER = "----index----,ana_1,ana_2,ana_3,ana_4,acc1x,acc1y,acc1z,gyro1x,gyro1y,gyro1z,acc1x,acc1y,acc1z,gyro1x,gyro1y,gyro1z,";
+void sd_page_print_header(SD_PAGE *page, uint8_t record_index) {
+  const char *TABLE_HEADER = "----index----,ana_1,ana_2,ana_3,ana_4,acc1x,acc1y,acc1z,gyro1x,gyro1y,gyro1z,acc1x,acc1y,acc1z,gyro1x,gyro1y,gyro1z,";
   pad_buf(&page->data_record_buffer[record_index]);
   size_t table_header_length = strlen(TABLE_HEADER);
   memcpy(page->data_record_buffer[record_index].index_and_data, TABLE_HEADER,
       (table_header_length <= MAX_DATA_RECORD_LENGTH) ? table_header_length : MAX_DATA_RECORD_LENGTH);
 }
 
-void wait_for_sd_card_state(SD_HandleTypeDef* hsd, HAL_SD_CardStateTypeDef expected_state) {
+void wait_for_sd_card_state(SD_HandleTypeDef *hsd, HAL_SD_CardStateTypeDef expected_state) {
   HAL_SD_CardStateTypeDef sd_card_state = HAL_SD_GetCardState(hsd);
   while(sd_card_state != expected_state) {
     sd_card_state = HAL_SD_GetCardState(hsd);
@@ -45,7 +45,7 @@ void wait_for_sd_card_state(SD_HandleTypeDef* hsd, HAL_SD_CardStateTypeDef expec
   }
 }
 
-void wait_for_sdio_state(SD_HandleTypeDef* hsd, HAL_SD_StateTypeDef expected_state) {
+void wait_for_sdio_state(SD_HandleTypeDef *hsd, HAL_SD_StateTypeDef expected_state) {
   while(hsd->State != expected_state) {
     LEDExt_flash_slow();
   }
@@ -56,11 +56,18 @@ uint32_t counterOldValue = 0;
 inline uint32_t get_counter() { return counterValue; }
 inline void sync_counter() { counterOldValue = counterValue; }
 inline void increase_counter() { counterValue++; }
-inline uint8_t is_counter_unchanged() { return (counterOldValue == counterValue) ? 1 : 0; }
+inline void wait_for_counter_changed() {
+  while(counterOldValue == counterValue) {
+    write_LED1(GPIO_PIN_SET);
+  }
+  counterOldValue = counterValue;
+  write_LED1(GPIO_PIN_RESET);
+}
 
 inline GPIO_PinState read_key0() { return HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_4); }
 inline GPIO_PinState read_key1() { return HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_3); }
 inline GPIO_PinState read_ext_sw() { return HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_14); }
+inline uint8_t user_command_start() { return read_ext_sw() == GPIO_PIN_SET ? 1 : 0; }
 inline void write_LED0(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, state); }
 inline void write_LED1(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5, state); }
 inline void write_LEDExt(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, state); }
@@ -74,7 +81,7 @@ inline void LEDExt_flash_fast() { // ~ 256 ms
   write_LEDExt(((get_counter() & 0x0040) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
 }
 
-void srat_ADC(ADC_HandleTypeDef* hadc, uint32_t channel) {
+void srat_ADC(ADC_HandleTypeDef *hadc, uint32_t channel) {
 	ADC_ChannelConfTypeDef sConfig = {0};
 	sConfig.Channel = channel;
 	sConfig.Rank = ADC_REGULAR_RANK_1;
@@ -84,7 +91,7 @@ void srat_ADC(ADC_HandleTypeDef* hadc, uint32_t channel) {
 	HAL_ADC_Start(hadc);
 }
 
-uint32_t read_ADC(ADC_HandleTypeDef* hadc) {
+uint16_t read_ADC(ADC_HandleTypeDef *hadc) {
 	HAL_ADC_PollForConversion(hadc, 1);
 	return HAL_ADC_GetValue(hadc);
 }
@@ -111,6 +118,20 @@ HAL_StatusTypeDef i2c_read_regs(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8
 AL_I2C_IsDeviceReady
 */
 
+uint8_t buffer[6];
+MPU_CONFIG mpu_config = {
+  MPU6XXX_ACCEL_RANGE_2G,
+  MPU6XXX_GYRO_RANGE_250DPS,
+  MPU6XXX_DLPF_DISABLE,
+  MPU6XXX_SLEEP_DISABLE,
+  8000
+};
+
+const uint16_t MPU6XXX_ACCEL_SEN = 16384;
+const uint16_t MPU6XXX_GYRO_SEN = 1310;
+uint16_t accel_sen = MPU6XXX_ACCEL_SEN;
+uint16_t gyro_sen = MPU6XXX_GYRO_SEN;
+
 HAL_StatusTypeDef i2c_write_reg(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t reg, uint8_t data) {
 	return HAL_I2C_Mem_Write(hi2c, i2c_addr, reg, I2C_MEMADD_SIZE_8BIT, &data, 1, 1);
 }
@@ -119,32 +140,33 @@ HAL_StatusTypeDef i2c_read_regs(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8
 	return HAL_I2C_Mem_Read(hi2c, i2c_addr, reg, I2C_MEMADD_SIZE_8BIT, buffer, len, 1);
 }
 
-HAL_StatusTypeDef mpu_get_accel_buf(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t *buffer) {
+HAL_StatusTypeDef mpu_get_accel_buf(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, XYZ_INT16T *xyz) {
 	HAL_StatusTypeDef res = i2c_read_regs(hi2c, i2c_addr, MPU6XXX_RA_ACCEL_XOUT_H, 6, buffer);
-
+	if (res == HAL_OK) {
     int16_t x = ((uint16_t)buffer[0] << 8) + buffer[1];
     int16_t y = ((uint16_t)buffer[2] << 8) + buffer[3];
     int16_t z = ((uint16_t)buffer[4] << 8) + buffer[5];
-    int16_t xx = (int32_t)x * 1000 / 16384;
-    int16_t yy = (int32_t)y * 1000 / 16384;
-    int16_t zz = (int32_t)z * 1000 / 16384;
 
-    return res;
+    xyz->x = (int32_t)x * 1000 / accel_sen;
+    xyz->y = (int32_t)y * 1000 / accel_sen;
+    xyz->z = (int32_t)z * 1000 / accel_sen;
+	}
+  return res;
 }
 
-HAL_StatusTypeDef mpu_get_gyro_buf(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t *buffer) {
+HAL_StatusTypeDef mpu_get_gyro_buf(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, XYZ_INT16T *xyz) {
 	HAL_StatusTypeDef res = i2c_read_regs(hi2c, i2c_addr, MPU6XXX_RA_GYRO_XOUT_H, 6, buffer);
-
+  if (res == HAL_OK) {
     int16_t x = ((uint16_t)buffer[0] << 8) + buffer[1];
     int16_t y = ((uint16_t)buffer[2] << 8) + buffer[3];
     int16_t z = ((uint16_t)buffer[4] << 8) + buffer[5];
-    int16_t xx = (int32_t)x * 100 / 1310;
-    int16_t yy = (int32_t)y * 100 / 1310;
-    int16_t zz = (int32_t)z * 100 / 1310;
-
-    return res;
+    xyz->x = (int32_t)x * 100 / gyro_sen;
+    xyz->y = (int32_t)y * 100 / gyro_sen;
+    xyz->z = (int32_t)z * 100 / gyro_sen;
+  }
+  return res;
 }
-
+/*
 HAL_StatusTypeDef mpu_get_accel_offset_buf(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t *buffer) {
 	HAL_StatusTypeDef res = i2c_read_regs(hi2c, i2c_addr, MPU6XXX_RA_XA_OFFS_H, 6, buffer);
 
@@ -171,7 +193,7 @@ HAL_StatusTypeDef mpu_get_gyro_offset_buf(I2C_HandleTypeDef *hi2c, uint8_t i2c_a
 
     return res;
 }
-
+*/
 static HAL_StatusTypeDef i2c_read_bit(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t reg, uint8_t bit, uint8_t *data)
 {
     uint8_t byte;
@@ -224,16 +246,16 @@ static HAL_StatusTypeDef mpu_set_param(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr
     HAL_StatusTypeDef res = 0;
 
     switch (cmd) {
-    case MPU6XXX_GYRO_RANGE:  /* Gyroscope full scale range */
+    case MPU_CMD_GYRO_RANGE:  /* Gyroscope full scale range */
         res = i2c_write_bits(hi2c, i2c_addr, MPU6XXX_RA_GYRO_CONFIG, MPU6XXX_GCONFIG_FS_SEL_BIT, MPU6XXX_GCONFIG_FS_SEL_LENGTH, param);
         break;
-    case MPU6XXX_ACCEL_RANGE: /* Accelerometer full scale range */
+    case MPU_CMD_ACCEL_RANGE: /* Accelerometer full scale range */
         res = i2c_write_bits(hi2c, i2c_addr, MPU6XXX_RA_ACCEL_CONFIG, MPU6XXX_ACONFIG_AFS_SEL_BIT, MPU6XXX_ACONFIG_AFS_SEL_LENGTH, param);
         break;
-    case MPU6XXX_DLPF_CONFIG: /* Digital Low Pass Filter */
+    case MPU_CMD_DLPF_CONFIG: /* Digital Low Pass Filter */
         res = i2c_write_bits(hi2c, i2c_addr, MPU6XXX_RA_CONFIG, MPU6XXX_CFG_DLPF_CFG_BIT, MPU6XXX_CFG_DLPF_CFG_LENGTH, param);
         break;
-    case MPU6XXX_SAMPLE_RATE: /* Sample Rate = 16-bit unsigned value.
+    case MPU_CMD_SAMPLE_RATE: /* Sample Rate = 16-bit unsigned value.
                                  Sample Rate = [1000 -  4]HZ when dlpf is enable
                                  Sample Rate = [8000 - 32]HZ when dlpf is disable */
 
@@ -260,7 +282,7 @@ static HAL_StatusTypeDef mpu_set_param(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr
         }
         res = i2c_write_reg(hi2c, i2c_addr, MPU6XXX_RA_SMPLRT_DIV, data);
         break;
-    case MPU6XXX_SLEEP: /* Configure sleep mode */
+    case MPU_CMD_SLEEP: /* Configure sleep mode */
         res = i2c_write_bits(hi2c, i2c_addr, MPU6XXX_RA_PWR_MGMT_1, MPU6XXX_PWR1_SLEEP_BIT, 1, param);
         break;
     }
@@ -268,22 +290,27 @@ static HAL_StatusTypeDef mpu_set_param(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr
     return res;
 }
 
+inline void mpu_sen_init() {
+  accel_sen = MPU6XXX_ACCEL_SEN >> mpu_config.mpu_accel_range;
+  gyro_sen = MPU6XXX_GYRO_SEN >> mpu_config.mpu_gyro_range;
+}
+
 HAL_StatusTypeDef mpu_init(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr)
 {
-    uint8_t reg = 0xFF;
-    HAL_StatusTypeDef res;
+  uint8_t reg = 0xFF;
+  HAL_StatusTypeDef res;
 
 	res = i2c_read_regs(hi2c, i2c_addr, MPU6XXX_RA_WHO_AM_I, 1, &reg); // MPU6050_WHO_AM_I; MPU6500_WHO_AM_I; MPU9250_WHO_AM_I; ...;
     if (res != HAL_OK) {
         return res;
 	}
 
-    res += i2c_write_bits(hi2c, i2c_addr, MPU6XXX_RA_PWR_MGMT_1, MPU6XXX_PWR1_CLKSEL_BIT, MPU6XXX_PWR1_CLKSEL_LENGTH, MPU6XXX_CLOCK_PLL_XGYRO);
-    res += mpu_set_param(hi2c, i2c_addr, MPU6XXX_GYRO_RANGE, MPU6XXX_GYRO_RANGE_250DPS);
-    res += mpu_set_param(hi2c, i2c_addr, MPU6XXX_ACCEL_RANGE, MPU6XXX_ACCEL_RANGE_2G);
-    res += mpu_set_param(hi2c, i2c_addr, MPU6XXX_SLEEP, MPU6XXX_SLEEP_DISABLE);
-    res += mpu_set_param(hi2c, i2c_addr, MPU6XXX_DLPF_CONFIG,MPU6XXX_DLPF_DISABLE);
-    res += mpu_set_param(hi2c, i2c_addr, MPU6XXX_SAMPLE_RATE,8000);
+  res += i2c_write_bits(hi2c, i2c_addr, MPU6XXX_RA_PWR_MGMT_1, MPU6XXX_PWR1_CLKSEL_BIT, MPU6XXX_PWR1_CLKSEL_LENGTH, MPU6XXX_CLOCK_PLL_XGYRO);
+  res += mpu_set_param(hi2c, i2c_addr, MPU_CMD_GYRO_RANGE, MPU6XXX_GYRO_RANGE_250DPS);
+  res += mpu_set_param(hi2c, i2c_addr, MPU_CMD_ACCEL_RANGE, MPU6XXX_ACCEL_RANGE_2G);
+  res += mpu_set_param(hi2c, i2c_addr, MPU_CMD_SLEEP, MPU6XXX_SLEEP_DISABLE);
+  res += mpu_set_param(hi2c, i2c_addr, MPU_CMD_DLPF_CONFIG,MPU6XXX_DLPF_DISABLE);
+  res += mpu_set_param(hi2c, i2c_addr, MPU_CMD_SAMPLE_RATE,8000);
 
-    return res;
+  return res;
 }

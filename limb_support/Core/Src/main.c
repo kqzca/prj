@@ -34,7 +34,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define SD_CARD_READ_ENABLED 1
+// #define SD_CARD_READ_ENABLED 1
 #define SD_CARD_WRITE_ENABLED 1
 /* USER CODE END PD */
 
@@ -57,16 +57,15 @@ TIM_HandleTypeDef htim4;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-ERROR_STATE error_state = NO_ERROR;
+STATE state = INIT;
 
-SD_PAGE sd_page_w1;
-SD_PAGE sd_page_w2;
-SD_PAGE* old_buf = &sd_page_w1;
-SD_PAGE* new_buf = &sd_page_w2;
-char read_buf[1024];
+uint8_t __attribute__ ((aligned)) write_buf[2][512];
+uint8_t __attribute__ ((aligned)) read_buf[512];
+char tmp_buf[110];
 uint32_t sd_block_address = 0;
 HAL_SD_CardInfoTypeDef sd_card_info;
-HAL_StatusTypeDef sd_op_res;
+SD_PAGE *page_buf = (SD_PAGE*)write_buf[0];
+uint16_t adc_result[4];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -80,7 +79,7 @@ static void MX_ADC2_Init(void);
 static void MX_DMA_Init(void);
 static void MX_SDIO_SD_Init(void);
 /* USER CODE BEGIN PFP */
-static uint8_t user_init();
+static void user_init();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -132,49 +131,80 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  uint8_t keep_going = user_init();
-  while (keep_going)
+  user_init();
+  state = IDLE;
+  while (1)
   {
+    while (user_command_start() != 1) {
+      ;
+    }
+    state = COLLECTING_DATA;
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    sync_counter();
-    srat_ADC(&hadc1, ADC_CHANNEL_1);	// PA1
-    srat_ADC(&hadc2, ADC_CHANNEL_2);	// PA2
-    write_LED0(read_key0());
-    uint32_t ADC_PA1 = read_ADC(&hadc1);
-    uint32_t ADC_PA2 = read_ADC(&hadc2);
-    srat_ADC(&hadc1, ADC_CHANNEL_3);	// PA3
-    srat_ADC(&hadc2, ADC_CHANNEL_4);	// PA4
-    uint32_t ADC_PA3 = read_ADC(&hadc1);
-    uint32_t ADC_PA4 = read_ADC(&hadc2);
-    srat_ADC(&hadc1, ADC_CHANNEL_7);	// PA7
-    uint32_t ADC_PA7 = read_ADC(&hadc1);
+    write_LED0(read_key0()); // A test to make sure code is running
+    page_buf = (SD_PAGE*)write_buf[sd_block_address & 0x01];
+
+    for (uint8_t record_index = 0; record_index <=3; record_index++) {
+      wait_for_counter_changed();
+
+      srat_ADC(&hadc1, ADC_CHANNEL_1);	// PA1
+      srat_ADC(&hadc2, ADC_CHANNEL_2);	// PA2
+      adc_result[0] = read_ADC(&hadc1);
+      adc_result[1] = read_ADC(&hadc2);
+      srat_ADC(&hadc1, ADC_CHANNEL_3);	// PA3
+      srat_ADC(&hadc2, ADC_CHANNEL_4);	// PA4
+      adc_result[2] = read_ADC(&hadc1);
+      adc_result[3] = read_ADC(&hadc2);
+      // srat_ADC(&hadc1, ADC_CHANNEL_7);	// PA7
+      // uint16_t adc_PA7 = read_ADC(&hadc1);
 #ifdef SD_CARD_READ_ENABLED
-    wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
-    sd_op_res = HAL_SD_ReadBlocks_DMA(&hsd, (uint8_t *)read_buf, sd_block_address - 1, 1);
-    wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
-    if (memcmp(old_buf, read_buf, 512) != 0) {
-      Error_Handler();
-    }
+      wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
+      HAL_StatusTypeDef sd_op_res = HAL_SD_ReadBlocks_DMA(&hsd, (uint8_t *)read_buf, sd_block_address - 1, 1);
+      wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
+      if (memcmp(write_buf[write_buf_index], read_buf, 512) != 0) {
+        Error_Handler();
+      }
 #endif
+      XYZ_INT16T xyz_accel_u, xyz_accel_l, xyz_gyro_u, xyz_gyro_l;
+      mpu_get_accel_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &xyz_accel_u);
+      mpu_get_gyro_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &xyz_gyro_u);
+      mpu_get_accel_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &xyz_accel_l);
+      mpu_get_gyro_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &xyz_gyro_l);
     /*
-    uint8_t buf_imu_u_accel[6], buf_imu_u_gyro[6];
-    mpu_get_accel_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, buf_imu_u_accel);
-    mpu_get_gyro_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, buf_imu_u_gyro);
-    uint8_t buf_imu_l_accel[6], buf_imu_l_gyro[6];
-    mpu_get_accel_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, buf_imu_l_accel);
-    mpu_get_gyro_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, buf_imu_l_gyro);
-    uint8_t buf_offset[6];
-    mpu_get_accel_offset_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, buf_offset);
-    mpu_get_gyro_offset_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, buf_offset);
-    mpu_get_accel_offset_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, buf_offset);
-    mpu_get_gyro_offset_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, buf_offset);
+      uint8_t buf_offset[6];
+      mpu_get_accel_offset_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, buf_offset);
+      mpu_get_gyro_offset_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, buf_offset);
+      mpu_get_accel_offset_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, buf_offset);
+      mpu_get_gyro_offset_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, buf_offset);
     */
-    while (is_counter_unchanged()) {
-      write_LED1(GPIO_PIN_SET);
+      // gyro lower z ---------------------------------------------------------------------------------
+      // gyro lower y -----------------------------------------------------------------------------    |
+      // gyro lower x -------------------------------------------------------------------------    |   |
+      // accel lower z -------------------------------------------------------------------     |   |   |
+      // accel lower y ----------------------------------------------------------------    |   |   |   |
+      // accel lower x ------------------------------------------------------------    |   |   |   |   |
+      // gyro upper z ---------------------------------------------------------    |   |   |   |   |   |
+      // gyro upper y -----------------------------------------------------    |   |   |   |   |   |   |
+      // gyro upper x -------------------------------------------------    |   |   |   |   |   |   |   |
+      // accel upper z --------------------------------------------    |   |   |   |   |   |   |   |   |
+      // accel upper y ----------------------------------------    |   |   |   |   |   |   |   |   |   |
+      // accel upper x ------------------------------------    |   |   |   |   |   |   |   |   |   |   |
+      //                                  ad1 ad2 ad3 ad4 |    |   |   |   |   |   |   |   |   |   |   |
+      snprintf(tmp_buf, sizeof(tmp_buf), "%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,",
+          adc_result[0], adc_result[1], adc_result[2], adc_result[3],
+          xyz_accel_u.x, xyz_accel_u.y, xyz_accel_u.z, xyz_gyro_u.x, xyz_gyro_u.y, xyz_gyro_u.z,
+          xyz_accel_l.x, xyz_accel_l.y, xyz_accel_l.z, xyz_gyro_l.x, xyz_gyro_l.y, xyz_gyro_l.z);
+      sd_page_print(page_buf, record_index, tmp_buf);
     }
-    write_LED1(GPIO_PIN_RESET);
+#ifdef SD_CARD_WRITE_ENABLED
+    wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
+    HAL_StatusTypeDef sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)page_buf, sd_block_address++, 1);
+    wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
+    // keep_going = sd_block_address < sd_card_info.BlockNbr ? 1 : 0;
+#else
+    keep_going = 1;
+#endif
   }
   /* USER CODE END 3 */
 }
@@ -367,7 +397,7 @@ static void MX_SDIO_SD_Init(void)
   hsd.Init.ClockBypass = SDIO_CLOCK_BYPASS_DISABLE;
   hsd.Init.ClockPowerSave = SDIO_CLOCK_POWER_SAVE_DISABLE;
   hsd.Init.BusWide = SDIO_BUS_WIDE_1B;
-  hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
+  hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_ENABLE;
   hsd.Init.ClockDiv = 4;
   if (HAL_SD_Init(&hsd) != HAL_OK)
   {
@@ -535,28 +565,25 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-uint8_t user_init() {
-  sd_page_print(old_buf, 0, "STM32 Board init done.");
+void user_init() {
+  sd_page_print(page_buf, 0, "STM32 Board init done.");
   mpu_init(&hi2c2, IMU_U_I2C_ADDR_SHIFTED);
   mpu_init(&hi2c2, IMU_L_I2C_ADDR_SHIFTED);
-  sd_page_print(old_buf, 1, "MPU6050 init done.");
+  sd_page_print(page_buf, 1, "MPU6050 init done.");
 #ifdef SD_CARD_WRITE_ENABLED
-  sd_op_res = HAL_SD_GetCardInfo(&hsd, &sd_card_info);
+  HAL_StatusTypeDef sd_op_res = HAL_SD_GetCardInfo(&hsd, &sd_card_info);
   sd_op_res = HAL_SD_Erase(&hsd, 0, sd_card_info.BlockNbr - 1);
   wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
 
-  char tmp_buf[110];
   snprintf(tmp_buf, sizeof(tmp_buf), "SD Card block size %lu, block number %lu",
       sd_card_info.BlockSize, sd_card_info.BlockNbr);
-  sd_page_print(old_buf, 2, tmp_buf);
-  sd_page_print_header(old_buf, 3);
+  sd_page_print(page_buf, 2, tmp_buf);
+  sd_page_print_header(page_buf, 3);
 
   wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
-  sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)old_buf, sd_block_address++, 1);
+  sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)page_buf, sd_block_address++, 1);
   wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
-  return sd_block_address < sd_card_info.BlockNbr ? 1 : 0;
-#else
-  return 1;
+  mpu_sen_init();
 #endif
 }
 /* USER CODE END 4 */
@@ -572,13 +599,7 @@ void Error_Handler(void)
   __disable_irq();
   while (1)
   {
-    switch (error_state) {
-    case NO_SD_CARD:
-      LEDExt_flash_fast();
-    case NO_ERROR:
-    default:
-      ;
-    }
+    ;
   }
   /* USER CODE END Error_Handler_Debug */
 }
