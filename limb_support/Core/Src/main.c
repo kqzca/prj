@@ -36,7 +36,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 // #define SD_CARD_READ_ENABLED 1
-// #define SD_CARD_ENABLED 1
+#define SD_CARD_ENABLED 1
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -65,7 +65,6 @@ UART_HandleTypeDef huart1;
 uint8_t __attribute__ ((aligned)) write_buf[2][512];
 uint8_t __attribute__ ((aligned)) read_buf[512];
 char tmp_buf[112];
-HAL_SD_CardInfoTypeDef sd_card_info;
 SD_PAGE *page_buf = (SD_PAGE*)write_buf[0];
 uint16_t adc_result[4];
 RTC_TimeTypeDef rtc_time = {0};
@@ -130,13 +129,13 @@ int main(void)
   MX_USART1_UART_Init();
   MX_ADC2_Init();
   MX_DMA_Init();
-  MX_SDIO_SD_Init();
   MX_RTC_Init();
   MX_TIM4_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start_IT(&htim4);
   HAL_TIM_Base_Start_IT(&htim6);
+  MX_SDIO_SD_Init();
   // Calibrate The ADC On Power-Up For Better Accuracy
   HAL_ADCEx_Calibration_Start(&hadc1);
 
@@ -160,7 +159,7 @@ int main(void)
       page_buf = (SD_PAGE*)write_buf[sd_block_address & 0x01];
 
       for (uint8_t record_index = 0; record_index <=3; record_index++) {
-        // wait_for_counter_changed();
+        wait_for_counter_changed();
         srat_ADC(&hadc1, ADC_CHANNEL_1);	// PA1
         srat_ADC(&hadc2, ADC_CHANNEL_2);	// PA2
         adc_result[0] = read_ADC(&hadc1);
@@ -493,7 +492,7 @@ static void MX_SDIO_SD_Init(void)
   hsd.Init.ClockPowerSave = SDIO_CLOCK_POWER_SAVE_DISABLE;
   hsd.Init.BusWide = SDIO_BUS_WIDE_1B;
   hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_ENABLE;
-  hsd.Init.ClockDiv = 4;
+  hsd.Init.ClockDiv = 2;
   if (HAL_SD_Init(&hsd) != HAL_OK)
   {
     Error_Handler();
@@ -530,7 +529,7 @@ static void MX_TIM4_Init(void)
   htim4.Instance = TIM4;
   htim4.Init.Prescaler = 72;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 2000;
+  htim4.Init.Period = 3000;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
@@ -708,6 +707,7 @@ void user_init() {
   mpu_sen_init();
   sd_page_print(page_buf, 1, "MPU6050 init done.", 0);
 #ifdef SD_CARD_ENABLED
+  HAL_SD_CardInfoTypeDef sd_card_info;
   HAL_StatusTypeDef sd_op_res = HAL_SD_GetCardInfo(&hsd, &sd_card_info);
   sd_op_res = HAL_SD_Erase(&hsd, 0, sd_card_info.BlockNbr - 1);
   wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
@@ -731,11 +731,12 @@ void user_init() {
   raw_buf[1][510] = 0xFF;
   raw_buf[1][511] = 0xFF;
 #ifdef SD_CARD_ENABLED
+  HAL_SD_CardInfoTypeDef sd_card_info;
   HAL_StatusTypeDef sd_op_res = HAL_SD_GetCardInfo(&hsd, &sd_card_info);
   sd_op_res = HAL_SD_Erase(&hsd, 0, sd_card_info.BlockNbr - 1);
   wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
 
-  snprintf((uint8_t *)page_buf, sizeof(page_buf), "SD Card block size %lu, block number %lu",
+  snprintf((char *)page_buf, sizeof(SD_PAGE_RAW), "SD Card block size %lu, block number %lu",
       sd_card_info.BlockSize, sd_card_info.BlockNbr);
 
   wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
