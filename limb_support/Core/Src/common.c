@@ -22,9 +22,9 @@ void set_state(STATE _state) {
 
 uint32_t counterValue = 0, oldCounterValue = 0;
 inline uint32_t get_counter() { return counterValue; }
-inline void sync_counter() { oldCounterValue = counterValue; }
 void increase_counter() {
   counterValue++;
+  /*
   switch(state) {
   case INIT:
     LEDExt_flash_slow();
@@ -41,6 +41,7 @@ void increase_counter() {
     LEDExt_flash_fast();
     break;
   }
+  */
 }
 void wait_for_counter_changed() {
   while(oldCounterValue == counterValue) {

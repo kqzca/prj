@@ -50,6 +50,8 @@ ADC_HandleTypeDef hadc2;
 
 I2C_HandleTypeDef hi2c2;
 
+RTC_HandleTypeDef hrtc;
+
 SD_HandleTypeDef hsd;
 DMA_HandleTypeDef hdma_sdio;
 
@@ -60,11 +62,12 @@ UART_HandleTypeDef huart1;
 /* USER CODE BEGIN PV */
 uint8_t __attribute__ ((aligned)) write_buf[2][512];
 uint8_t __attribute__ ((aligned)) read_buf[512];
-char tmp_buf[110];
+char tmp_buf[112];
 uint32_t sd_block_address = 0;
 HAL_SD_CardInfoTypeDef sd_card_info;
 SD_PAGE *page_buf = (SD_PAGE*)write_buf[0];
 uint16_t adc_result[4];
+RTC_TimeTypeDef rtc_time = {0};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -73,10 +76,11 @@ static void MX_GPIO_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_I2C2_Init(void);
 static void MX_USART1_UART_Init(void);
-static void MX_TIM4_Init(void);
 static void MX_ADC2_Init(void);
 static void MX_DMA_Init(void);
 static void MX_SDIO_SD_Init(void);
+static void MX_RTC_Init(void);
+static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
 static void user_init();
 /* USER CODE END PFP */
@@ -117,10 +121,11 @@ int main(void)
   MX_ADC1_Init();
   MX_I2C2_Init();
   MX_USART1_UART_Init();
-  MX_TIM4_Init();
   MX_ADC2_Init();
   MX_DMA_Init();
   MX_SDIO_SD_Init();
+  MX_RTC_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start_IT(&htim4);
   // Calibrate The ADC On Power-Up For Better Accuracy
@@ -138,15 +143,15 @@ int main(void)
       set_state(IDLE);
     } else {
       set_state(COLLECTING_DATA);
-      /* USER CODE END WHILE */
+    /* USER CODE END WHILE */
 
-      /* USER CODE BEGIN 3 */
+    /* USER CODE BEGIN 3 */
       write_LED0(read_key0()); // A test to make sure code is running
       page_buf = (SD_PAGE*)write_buf[sd_block_address & 0x01];
 
+      uint32_t counter = get_counter();
       for (uint8_t record_index = 0; record_index <=3; record_index++) {
-        wait_for_counter_changed();
-
+        // wait_for_counter_changed();
         srat_ADC(&hadc1, ADC_CHANNEL_1);	// PA1
         srat_ADC(&hadc2, ADC_CHANNEL_2);	// PA2
         adc_result[0] = read_ADC(&hadc1);
@@ -171,27 +176,30 @@ int main(void)
         mpu_get_accel_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &xyz_accel_l);
         mpu_get_gyro_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &xyz_gyro_l);
 
-        // gyro lower z ---------------------------------------------------------------------------------
-        // gyro lower y -----------------------------------------------------------------------------    |
-        // gyro lower x -------------------------------------------------------------------------    |   |
-        // accel lower z -------------------------------------------------------------------     |   |   |
-        // accel lower y ----------------------------------------------------------------    |   |   |   |
-        // accel lower x ------------------------------------------------------------    |   |   |   |   |
-        // gyro upper z ---------------------------------------------------------    |   |   |   |   |   |
-        // gyro upper y -----------------------------------------------------    |   |   |   |   |   |   |
-        // gyro upper x -------------------------------------------------    |   |   |   |   |   |   |   |
-        // accel upper z --------------------------------------------    |   |   |   |   |   |   |   |   |
-        // accel upper y ----------------------------------------    |   |   |   |   |   |   |   |   |   |
-        // accel upper x ------------------------------------    |   |   |   |   |   |   |   |   |   |   |
-        //                                  ad1 ad2 ad3 ad4  |   |   |   |   |   |   |   |   |   |   |   |
-        snprintf(tmp_buf, sizeof(tmp_buf), "%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,%5d,",
+        // gyro lower z ------------------------------------------------------------------
+        // gyro lower y ---------------------------------------------------------------   |
+        // gyro lower x ------------------------------------------------------------   |  |
+        // accel lower z --------------------------------------------------------   |  |  |
+        // accel lower y -----------------------------------------------------   |  |  |  |
+        // accel lower x --------------------------------------------------   |  |  |  |  |
+        // gyro upper z ------------------------------------------------   |  |  |  |  |  |
+        // gyro upper y ---------------------------------------------   |  |  |  |  |  |  |
+        // gyro upper x ------------------------------------------   |  |  |  |  |  |  |  |
+        // accel upper z --------------------------------------   |  |  |  |  |  |  |  |  |
+        // accel upper y -----------------------------------   |  |  |  |  |  |  |  |  |  |
+        // accel upper x --------------------------------   |  |  |  |  |  |  |  |  |  |  |
+        //                                  a1 a2 a3 a4  |  |  |  |  |  |  |  |  |  |  |  |
+        snprintf(tmp_buf, sizeof(tmp_buf), "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,",
             adc_result[0], adc_result[1], adc_result[2], adc_result[3],
             xyz_accel_u.x, xyz_accel_u.y, xyz_accel_u.z, xyz_gyro_u.x, xyz_gyro_u.y, xyz_gyro_u.z,
             xyz_accel_l.x, xyz_accel_l.y, xyz_accel_l.z, xyz_gyro_l.x, xyz_gyro_l.y, xyz_gyro_l.z);
-        sd_page_print(page_buf, record_index, tmp_buf);
+        HAL_RTC_GetTime(&hrtc, &rtc_time, RTC_FORMAT_BIN);
+        sd_page_print(page_buf, record_index, tmp_buf, rtc_time.Seconds);
       }
 #ifdef SD_CARD_WRITE_ENABLED
+      counter = get_counter();
       wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
+      counter = get_counter();
       HAL_StatusTypeDef sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)page_buf, sd_block_address++, 1);
       wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
 #endif
@@ -213,12 +221,14 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI_DIV2;
-  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL12;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL9;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -232,12 +242,13 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
-  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV4;
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_RTC|RCC_PERIPHCLK_ADC;
+  PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
+  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
@@ -369,6 +380,63 @@ static void MX_I2C2_Init(void)
 }
 
 /**
+  * @brief RTC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_RTC_Init(void)
+{
+
+  /* USER CODE BEGIN RTC_Init 0 */
+
+  /* USER CODE END RTC_Init 0 */
+
+  RTC_TimeTypeDef sTime = {0};
+  RTC_DateTypeDef DateToUpdate = {0};
+
+  /* USER CODE BEGIN RTC_Init 1 */
+
+  /* USER CODE END RTC_Init 1 */
+  /** Initialize RTC Only
+  */
+  hrtc.Instance = RTC;
+  hrtc.Init.AsynchPrediv = RTC_AUTO_1_SECOND;
+  hrtc.Init.OutPut = RTC_OUTPUTSOURCE_ALARM;
+  if (HAL_RTC_Init(&hrtc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /* USER CODE BEGIN Check_RTC_BKUP */
+
+  /* USER CODE END Check_RTC_BKUP */
+
+  /** Initialize RTC and set the Time and Date
+  */
+  sTime.Hours = 0;
+  sTime.Minutes = 0;
+  sTime.Seconds = 0;
+
+  if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  DateToUpdate.WeekDay = RTC_WEEKDAY_MONDAY;
+  DateToUpdate.Month = RTC_MONTH_MARCH;
+  DateToUpdate.Date = 11;
+  DateToUpdate.Year = 0;
+
+  if (HAL_RTC_SetDate(&hrtc, &DateToUpdate, RTC_FORMAT_BIN) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN RTC_Init 2 */
+
+  /* USER CODE END RTC_Init 2 */
+
+}
+
+/**
   * @brief SDIO Initialization Function
   * @param None
   * @retval None
@@ -424,7 +492,7 @@ static void MX_TIM4_Init(void)
 
   /* USER CODE END TIM4_Init 1 */
   htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 36;
+  htim4.Init.Prescaler = 72;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim4.Init.Period = 2000;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -558,12 +626,12 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 void user_init() {
-  sd_page_print(page_buf, 0, "STM32 Board init done.");
+  sd_page_print(page_buf, 0, "STM32 Board init done.", 0);
   uint8_t reg_u = 0xFF, reg_l = 0xFF;;
   mpu_init(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &reg_u);
   mpu_init(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &reg_l);
   mpu_sen_init();
-  sd_page_print(page_buf, 1, "MPU6050 init done.");
+  sd_page_print(page_buf, 1, "MPU6050 init done.", 0);
 #ifdef SD_CARD_WRITE_ENABLED
   HAL_StatusTypeDef sd_op_res = HAL_SD_GetCardInfo(&hsd, &sd_card_info);
   sd_op_res = HAL_SD_Erase(&hsd, 0, sd_card_info.BlockNbr - 1);
@@ -571,8 +639,9 @@ void user_init() {
 
   snprintf(tmp_buf, sizeof(tmp_buf), "SD Card block size %lu, block number %lu",
       sd_card_info.BlockSize, sd_card_info.BlockNbr);
-  sd_page_print(page_buf, 2, tmp_buf);
-  sd_page_print_header(page_buf, 3);
+  sd_page_print(page_buf, 2, tmp_buf, 0);
+  const char *TABLE_HEADER = "ana_1,ana_2,ana_3,ana_4,acc1x,acc1y,acc1z,gyro1x,gyro1y,gyro1z,acc1x,acc1y,acc1z,gyro1x,gyro1y,gyro1z,";
+  sd_page_print(page_buf, 3, TABLE_HEADER, 0);
 
   wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
   sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)page_buf, sd_block_address++, 1);

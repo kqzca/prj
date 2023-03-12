@@ -10,28 +10,19 @@
 #include <string.h>
 #include <stdio.h>
 
-const size_t MAX_DATA_RECORD_LENGTH = 112;
-const char PADDING_AND_LINE_ENDING[18] = "                \r\n";
-static inline void pad_buf(DATA_RECORD *_data_record_buffer) {
-	memcpy(_data_record_buffer->padding, PADDING_AND_LINE_ENDING, sizeof(PADDING_AND_LINE_ENDING));
+const size_t MAX_DATA_RECORD_LENGTH = 126;
+const char LINE_ENDING[2] = "\r\n";
+static inline void add_lind_end(DATA_RECORD *_data_record_buffer) {
+	memcpy(_data_record_buffer->separated.line_end, LINE_ENDING, sizeof(LINE_ENDING));
 }
 
-void sd_page_print(SD_PAGE *page, uint8_t record_index, char *info) {
+void sd_page_print(SD_PAGE *page, uint8_t record_index, char *info, uint8_t rtc_second) {
   if ((page == 0) || (record_index > 3)) {
     return;
   }
-  pad_buf(&page->data_record_buffer[record_index]);
-  snprintf(page->data_record_buffer[record_index].index, 14, "%13ld", get_counter());
-  int32_t len = snprintf(page->data_record_buffer[record_index].data, MAX_DATA_RECORD_LENGTH, "%s", info);
-  memset(page->data_record_buffer[record_index].data + len, ' ', 96 - len);
-}
-
-void sd_page_print_header(SD_PAGE *page, uint8_t record_index) {
-  const char *TABLE_HEADER = "----index----,ana_1,ana_2,ana_3,ana_4,acc1x,acc1y,acc1z,gyro1x,gyro1y,gyro1z,acc1x,acc1y,acc1z,gyro1x,gyro1y,gyro1z,";
-  pad_buf(&page->data_record_buffer[record_index]);
-  size_t table_header_length = strlen(TABLE_HEADER);
-  memcpy(page->data_record_buffer[record_index].index, TABLE_HEADER,
-      (table_header_length <= MAX_DATA_RECORD_LENGTH) ? table_header_length : MAX_DATA_RECORD_LENGTH);
+  add_lind_end(&page->data_record_buffer[record_index]);
+  int32_t len = snprintf(page->data_record_buffer[record_index].buffer, MAX_DATA_RECORD_LENGTH, "%02d,%10ld,%s", rtc_second, get_counter(), info);
+  memset(page->data_record_buffer[record_index].buffer + len, ' ', 126 - len);
 }
 
 void wait_for_sd_card_state(SD_HandleTypeDef *hsd, HAL_SD_CardStateTypeDef expected_state) {
