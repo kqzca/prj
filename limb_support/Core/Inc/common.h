@@ -23,7 +23,8 @@ void set_state(STATE _state);
 
 uint32_t get_counter();
 void increase_counter();
-void wait_for_counter_changed();
+uint32_t wait_for_counter_changed();
+void increase_250ms_counter();
 
 GPIO_PinState read_key0();
 GPIO_PinState read_key1();
@@ -34,9 +35,6 @@ void write_LED1(GPIO_PinState state);
 void write_LEDExt(GPIO_PinState state);
 void LEDExt_on();
 void LEDExt_off();
-void LEDExt_flash_slow(); // ~ 1024 ms
-void LEDExt_flash();      // ~ 512 ms
-void LEDExt_flash_fast(); // ~ 256 ms
 
 void srat_ADC(ADC_HandleTypeDef *hadc, uint32_t channel);
 uint16_t read_ADC(ADC_HandleTypeDef *hadc);

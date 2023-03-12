@@ -29,12 +29,10 @@ void wait_for_sd_card_state(SD_HandleTypeDef *hsd, HAL_SD_CardStateTypeDef expec
   HAL_SD_CardStateTypeDef sd_card_state = HAL_SD_GetCardState(hsd);
   while(sd_card_state != expected_state) {
     sd_card_state = HAL_SD_GetCardState(hsd);
-    LEDExt_flash_slow();
   }
 }
 
 void wait_for_sdio_state(SD_HandleTypeDef *hsd, HAL_SD_StateTypeDef expected_state) {
   while(hsd->State != expected_state) {
-    LEDExt_flash_slow();
   }
 }

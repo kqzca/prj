@@ -36,7 +36,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 // #define SD_CARD_READ_ENABLED 1
-#define SD_CARD_WRITE_ENABLED 1
+// #define SD_CARD_ENABLED 1
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -56,18 +56,24 @@ SD_HandleTypeDef hsd;
 DMA_HandleTypeDef hdma_sdio;
 
 TIM_HandleTypeDef htim4;
+TIM_HandleTypeDef htim6;
 
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
+#ifdef HUMAN_READABLE
 uint8_t __attribute__ ((aligned)) write_buf[2][512];
 uint8_t __attribute__ ((aligned)) read_buf[512];
 char tmp_buf[112];
-uint32_t sd_block_address = 0;
 HAL_SD_CardInfoTypeDef sd_card_info;
 SD_PAGE *page_buf = (SD_PAGE*)write_buf[0];
 uint16_t adc_result[4];
 RTC_TimeTypeDef rtc_time = {0};
+#else
+uint8_t __attribute__ ((aligned)) raw_buf[2][512];
+SD_PAGE_RAW *page_buf = (SD_PAGE_RAW*)raw_buf[0];
+#endif
+uint32_t sd_block_address = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -81,6 +87,7 @@ static void MX_DMA_Init(void);
 static void MX_SDIO_SD_Init(void);
 static void MX_RTC_Init(void);
 static void MX_TIM4_Init(void);
+static void MX_TIM6_Init(void);
 /* USER CODE BEGIN PFP */
 static void user_init();
 /* USER CODE END PFP */
@@ -126,8 +133,10 @@ int main(void)
   MX_SDIO_SD_Init();
   MX_RTC_Init();
   MX_TIM4_Init();
+  MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start_IT(&htim4);
+  HAL_TIM_Base_Start_IT(&htim6);
   // Calibrate The ADC On Power-Up For Better Accuracy
   HAL_ADCEx_Calibration_Start(&hadc1);
 
@@ -139,6 +148,7 @@ int main(void)
   set_state(IDLE);
   while (1)
   {
+    write_LED0(read_ext_sw()); // A test to make sure code is running
     if (ext_key_start() != 1) {
       set_state(IDLE);
     } else {
@@ -146,10 +156,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-      write_LED0(read_key0()); // A test to make sure code is running
+#ifdef HUMAN_READABLE
       page_buf = (SD_PAGE*)write_buf[sd_block_address & 0x01];
 
-      uint32_t counter = get_counter();
       for (uint8_t record_index = 0; record_index <=3; record_index++) {
         // wait_for_counter_changed();
         srat_ADC(&hadc1, ADC_CHANNEL_1);	// PA1
@@ -196,13 +205,38 @@ int main(void)
         HAL_RTC_GetTime(&hrtc, &rtc_time, RTC_FORMAT_BIN);
         sd_page_print(page_buf, record_index, tmp_buf, rtc_time.Seconds);
       }
-#ifdef SD_CARD_WRITE_ENABLED
-      counter = get_counter();
+#ifdef SD_CARD_ENABLED
       wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
-      counter = get_counter();
       HAL_StatusTypeDef sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)page_buf, sd_block_address++, 1);
       wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
 #endif
+#else // HUMAN_READABLE
+      page_buf = (SD_PAGE_RAW*)raw_buf[sd_block_address & 0x01];
+
+      for (uint8_t record_index = 0; record_index < 15; record_index++) {
+        uint16_t counter_uint16 = wait_for_counter_changed();
+        page_buf->data_raw_buffer[record_index].index = counter_uint16;
+        srat_ADC(&hadc1, ADC_CHANNEL_1);  // PA1
+        srat_ADC(&hadc2, ADC_CHANNEL_2);  // PA2
+        page_buf->data_raw_buffer[record_index].ad[0] = read_ADC(&hadc1);
+        page_buf->data_raw_buffer[record_index].ad[1] = read_ADC(&hadc2);
+        srat_ADC(&hadc1, ADC_CHANNEL_3);  // PA3
+        srat_ADC(&hadc2, ADC_CHANNEL_4);  // PA4
+        page_buf->data_raw_buffer[record_index].ad[2] = read_ADC(&hadc1);
+        page_buf->data_raw_buffer[record_index].ad[3] = read_ADC(&hadc2);
+        // srat_ADC(&hadc1, ADC_CHANNEL_7); // PA7
+        // uint16_t adc_PA7 = read_ADC(&hadc1);
+        i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6, page_buf->data_raw_buffer[record_index].accel_u);
+        i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6, page_buf->data_raw_buffer[record_index].gyro_u);
+        i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6, page_buf->data_raw_buffer[record_index].accel_l);
+        i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6, page_buf->data_raw_buffer[record_index].gyro_l);
+      }
+#ifdef SD_CARD_ENABLED
+      wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
+      HAL_StatusTypeDef sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)page_buf, sd_block_address++, 1);
+      wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
+#endif
+#endif // HUMAN_READABLE
     }
   }
   /* USER CODE END 3 */
@@ -361,7 +395,7 @@ static void MX_I2C2_Init(void)
 
   /* USER CODE END I2C2_Init 1 */
   hi2c2.Instance = I2C2;
-  hi2c2.Init.ClockSpeed = 100000;
+  hi2c2.Init.ClockSpeed = 400000;
   hi2c2.Init.DutyCycle = I2C_DUTYCYCLE_2;
   hi2c2.Init.OwnAddress1 = 0;
   hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
@@ -449,6 +483,7 @@ static void MX_SDIO_SD_Init(void)
   /* USER CODE END SDIO_Init 0 */
 
   /* USER CODE BEGIN SDIO_Init 1 */
+#ifdef SD_CARD_ENABLED
   STATE old_state = get_state();
   set_state(INIT_SD_CARD);
   /* USER CODE END SDIO_Init 1 */
@@ -469,6 +504,7 @@ static void MX_SDIO_SD_Init(void)
   }
   /* USER CODE BEGIN SDIO_Init 2 */
   set_state(old_state);
+#endif
   /* USER CODE END SDIO_Init 2 */
 
 }
@@ -515,6 +551,44 @@ static void MX_TIM4_Init(void)
   /* USER CODE BEGIN TIM4_Init 2 */
 
   /* USER CODE END TIM4_Init 2 */
+
+}
+
+/**
+  * @brief TIM6 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM6_Init(void)
+{
+
+  /* USER CODE BEGIN TIM6_Init 0 */
+
+  /* USER CODE END TIM6_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM6_Init 1 */
+
+  /* USER CODE END TIM6_Init 1 */
+  htim6.Instance = TIM6;
+  htim6.Init.Prescaler = 720;
+  htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim6.Init.Period = 25000;
+  htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim6, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM6_Init 2 */
+
+  /* USER CODE END TIM6_Init 2 */
 
 }
 
@@ -626,13 +700,14 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 void user_init() {
+#ifdef HUMAN_READABLE
   sd_page_print(page_buf, 0, "STM32 Board init done.", 0);
   uint8_t reg_u = 0xFF, reg_l = 0xFF;;
   mpu_init(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &reg_u);
   mpu_init(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &reg_l);
   mpu_sen_init();
   sd_page_print(page_buf, 1, "MPU6050 init done.", 0);
-#ifdef SD_CARD_WRITE_ENABLED
+#ifdef SD_CARD_ENABLED
   HAL_StatusTypeDef sd_op_res = HAL_SD_GetCardInfo(&hsd, &sd_card_info);
   sd_op_res = HAL_SD_Erase(&hsd, 0, sd_card_info.BlockNbr - 1);
   wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
@@ -646,7 +721,28 @@ void user_init() {
   wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
   sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)page_buf, sd_block_address++, 1);
   wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
-#endif
+#endif // SD_CARD_ENABLED//
+#else //HUMAN_READABLE
+  uint8_t reg_u = 0xFF, reg_l = 0xFF;;
+  mpu_init(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &reg_u);
+  mpu_init(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &reg_l);
+  raw_buf[0][510] = 0xFF;
+  raw_buf[0][511] = 0xFF;
+  raw_buf[1][510] = 0xFF;
+  raw_buf[1][511] = 0xFF;
+#ifdef SD_CARD_ENABLED
+  HAL_StatusTypeDef sd_op_res = HAL_SD_GetCardInfo(&hsd, &sd_card_info);
+  sd_op_res = HAL_SD_Erase(&hsd, 0, sd_card_info.BlockNbr - 1);
+  wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
+
+  snprintf((uint8_t *)page_buf, sizeof(page_buf), "SD Card block size %lu, block number %lu",
+      sd_card_info.BlockSize, sd_card_info.BlockNbr);
+
+  wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
+  sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)page_buf, sd_block_address++, 1);
+  wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
+#endif // SD_CARD_ENABLED//
+#endif // HUMAN_READABLE
 }
 /* USER CODE END 4 */
 
