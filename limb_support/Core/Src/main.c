@@ -26,6 +26,7 @@
 #include "mpu.h"
 #include "sd.h"
 #include <stdio.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -37,6 +38,9 @@
 /* USER CODE BEGIN PD */
 // #define SD_CARD_READ_ENABLED 1
 #define SD_CARD_ENABLED 1
+// #define HUMAN_READABLE 1
+// #define RAW_DATA_ONLY 1
+#define SPEED_TEST 1
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -61,18 +65,27 @@ TIM_HandleTypeDef htim6;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-#ifdef HUMAN_READABLE
+#if defined(HUMAN_READABLE)
 uint8_t __attribute__ ((aligned)) write_buf[2][512];
 uint8_t __attribute__ ((aligned)) read_buf[512];
 char tmp_buf[112];
 SD_PAGE *page_buf = (SD_PAGE*)write_buf[0];
 uint16_t adc_result[4];
+XYZ_INT16T xyz_accel_u, xyz_accel_l, xyz_gyro_u, xyz_gyro_l;
 RTC_TimeTypeDef rtc_time = {0};
-#else
+uint32_t sd_block_address = 0;
+#elif defined(RAW_DATA_ONLY)
 uint8_t __attribute__ ((aligned)) raw_buf[2][512];
 SD_PAGE_RAW *page_buf = (SD_PAGE_RAW*)raw_buf[0];
-#endif
 uint32_t sd_block_address = 0;
+#elif defined(SPEED_TEST)
+uint32_t sd_block_address = 7000000;
+uint16_t timer6_counter[10][16];
+uint8_t speed_test_i2c_read_buf[6];
+uint16_t adc_result[4];
+XYZ_INT16T xyz_accel_u, xyz_accel_l, xyz_gyro_u, xyz_gyro_l;
+uint8_t __attribute__ ((aligned)) speed_test_sd_write_buf[512];
+#endif
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -155,7 +168,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-#ifdef HUMAN_READABLE
+#if defined(HUMAN_READABLE)
       page_buf = (SD_PAGE*)write_buf[sd_block_address & 0x01];
 
       for (uint8_t record_index = 0; record_index <=3; record_index++) {
@@ -178,7 +191,6 @@ int main(void)
           Error_Handler();
         }
   #endif
-        XYZ_INT16T xyz_accel_u, xyz_accel_l, xyz_gyro_u, xyz_gyro_l;
         mpu_get_accel_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &xyz_accel_u);
         mpu_get_gyro_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &xyz_gyro_u);
         mpu_get_accel_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &xyz_accel_l);
@@ -209,7 +221,7 @@ int main(void)
       HAL_StatusTypeDef sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)page_buf, sd_block_address++, 1);
       wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
 #endif
-#else // HUMAN_READABLE
+#elif defined(RAW_DATA_ONLY)
       page_buf = (SD_PAGE_RAW*)raw_buf[sd_block_address & 0x01];
 
       for (uint8_t record_index = 0; record_index < 15; record_index++) {
@@ -235,7 +247,76 @@ int main(void)
       HAL_StatusTypeDef sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)page_buf, sd_block_address++, 1);
       wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
 #endif
-#endif // HUMAN_READABLE
+#elif defined(SPEED_TEST)
+      for (int i=0; i<10; i++) {
+        timer6_counter[i][0] = read_TIM6_counter();
+        i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6, speed_test_i2c_read_buf);
+        timer6_counter[i][1] = read_TIM6_counter();
+        i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6, speed_test_i2c_read_buf);
+        timer6_counter[i][2] = read_TIM6_counter();
+        i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6, speed_test_i2c_read_buf);
+        timer6_counter[i][3] = read_TIM6_counter();
+        i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6, speed_test_i2c_read_buf);
+        timer6_counter[i][4] = read_TIM6_counter();
+        memset((char *)speed_test_sd_write_buf, 'a', 512);
+        timer6_counter[i][5] = read_TIM6_counter();
+        wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
+        HAL_StatusTypeDef sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, speed_test_sd_write_buf, sd_block_address++, 1);
+        wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
+        wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
+        timer6_counter[i][6] = read_TIM6_counter();
+        srat_ADC(&hadc1, ADC_CHANNEL_1);  // PA1
+        srat_ADC(&hadc2, ADC_CHANNEL_2);  // PA2
+        adc_result[0] = read_ADC(&hadc1);
+        adc_result[1] = read_ADC(&hadc2);
+        srat_ADC(&hadc1, ADC_CHANNEL_3);  // PA3
+        srat_ADC(&hadc2, ADC_CHANNEL_4);  // PA4
+        adc_result[2] = read_ADC(&hadc1);
+        adc_result[3] = read_ADC(&hadc2);
+        timer6_counter[i][7] = read_TIM6_counter();
+        mpu_get_accel_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &xyz_accel_u);
+        timer6_counter[i][8] = read_TIM6_counter();
+        mpu_get_gyro_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &xyz_gyro_u);
+        timer6_counter[i][9] = read_TIM6_counter();
+        mpu_get_accel_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &xyz_accel_l);
+        timer6_counter[i][10] = read_TIM6_counter();
+        mpu_get_gyro_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &xyz_gyro_l);
+        timer6_counter[i][11] = read_TIM6_counter();
+        snprintf((char *)speed_test_sd_write_buf, 512, "%ld,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,",
+            sd_block_address, adc_result[0], adc_result[1], adc_result[2], adc_result[3],
+            xyz_accel_u.x, xyz_accel_u.y, xyz_accel_u.z, xyz_gyro_u.x, xyz_gyro_u.y, xyz_gyro_u.z,
+            xyz_accel_l.x, xyz_accel_l.y, xyz_accel_l.z, xyz_gyro_l.x, xyz_gyro_l.y, xyz_gyro_l.z);
+        timer6_counter[i][12] = read_TIM6_counter();
+        wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
+        sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, speed_test_sd_write_buf, sd_block_address++, 1);
+        wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
+        wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
+        timer6_counter[i][13] = read_TIM6_counter();
+        timer6_counter[i][14] = timer6_counter[i][6] - timer6_counter[i][0];
+        timer6_counter[i][15] = timer6_counter[i][13] - timer6_counter[i][6];
+      }
+      uint32_t speed_test_summary_i2c_raw_read = 0;
+      uint32_t speed_test_summary_memset = 0;
+      uint32_t speed_test_summary_sd_write = 0;
+      uint32_t speed_test_summary_ad_read = 0;
+      uint32_t speed_test_summary_i2c_sen_read = 0;
+      uint32_t speed_test_summary_snprintf = 0;
+      uint32_t speed_test_summary_raw_data = 0;
+      uint32_t speed_test_summary_human_readable = 0;
+      for (int i=0; i<10; i++) {
+        speed_test_summary_i2c_raw_read += (timer6_counter[i][4] - timer6_counter[i][0]);
+        speed_test_summary_memset += (timer6_counter[i][5] - timer6_counter[i][4]);
+        speed_test_summary_sd_write += (timer6_counter[i][6] - timer6_counter[i][5]);
+        speed_test_summary_ad_read += (timer6_counter[i][7] - timer6_counter[i][6]);
+        speed_test_summary_i2c_sen_read += (timer6_counter[i][11] - timer6_counter[i][7]);
+        speed_test_summary_snprintf += (timer6_counter[i][12] - timer6_counter[i][11]);
+        speed_test_summary_sd_write += (timer6_counter[i][13] - timer6_counter[i][12]);
+        speed_test_summary_raw_data += timer6_counter[i][14];
+        speed_test_summary_human_readable += timer6_counter[i][15];
+      }
+      speed_test_summary_i2c_raw_read = speed_test_summary_i2c_raw_read / 4;
+      speed_test_summary_i2c_sen_read = speed_test_summary_i2c_sen_read / 4;
+#endif // HUMAN_READABLE / RAW_DATA_ONLY / SPEED_TEST
     }
   }
   /* USER CODE END 3 */
@@ -699,7 +780,7 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 void user_init() {
-#ifdef HUMAN_READABLE
+#if defined(HUMAN_READABLE)
   sd_page_print(page_buf, 0, "STM32 Board init done.", 0);
   uint8_t reg_u = 0xFF, reg_l = 0xFF;;
   mpu_init(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &reg_u);
@@ -722,7 +803,7 @@ void user_init() {
   sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)page_buf, sd_block_address++, 1);
   wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
 #endif // SD_CARD_ENABLED//
-#else //HUMAN_READABLE
+#elif defined(RAW_DATA_ONLY)
   uint8_t reg_u = 0xFF, reg_l = 0xFF;;
   mpu_init(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &reg_u);
   mpu_init(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &reg_l);
