@@ -73,6 +73,10 @@ inline uint16_t read_TIM6_counter() {
   return TIM6->CNT;
 }
 
+inline uint16_t reset_TIM6_counter() {
+  return TIM6->CNT = 0;
+}
+
 void srat_ADC(ADC_HandleTypeDef *hadc, uint32_t channel) {
 	ADC_ChannelConfTypeDef sConfig = {0};
 	sConfig.Channel = channel;

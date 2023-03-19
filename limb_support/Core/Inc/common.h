@@ -26,6 +26,7 @@ void increase_counter();
 uint32_t wait_for_counter_changed();
 void increase_250ms_counter();
 uint16_t read_TIM6_counter();
+uint16_t reset_TIM6_counter();
 
 GPIO_PinState read_key0();
 GPIO_PinState read_key1();
