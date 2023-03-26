@@ -9,23 +9,23 @@
   * <h2><center>&copy; Copyright (c) 2023 STMicroelectronics.
   * All rights reserved.</center></h2>
   *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
+  * This software component is licensed by ST under Ultimate Liberty license
+  * SLA0044, the "License"; You may not use this file except in compliance with
+  * the License. You may obtain a copy of the License at:
+  *                             www.st.com/SLA0044
   *
   ******************************************************************************
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "fatfs.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "common.h"
 #include "mpu.h"
-#include "sd.h"
-#include <stdio.h>
+#include "w25q16.h"
 #include <string.h>
 /* USER CODE END Includes */
 
@@ -36,9 +36,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define SD_CARD_ENABLED 1
-// #define HUMAN_READABLE 1
-#define RAW_DATA_ONLY 1
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -57,28 +54,21 @@ RTC_HandleTypeDef hrtc;
 SD_HandleTypeDef hsd;
 DMA_HandleTypeDef hdma_sdio;
 
+SPI_HandleTypeDef hspi2;
+
 TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim6;
 
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-uint8_t __attribute__ ((aligned)) write_buf[2][512];
-uint32_t sd_block_address = 1001000;
-#if defined(HUMAN_READABLE)
-char tmp_buf[112];
-SD_PAGE *page_buf = (SD_PAGE*)write_buf[0];
-uint16_t adc_result[4];
-XYZ_INT16T xyz_accel_u, xyz_accel_l, xyz_gyro_u, xyz_gyro_l;
-RTC_TimeTypeDef rtc_time = {0};
-#elif defined(RAW_DATA_ONLY)
-SD_PAGE_RAW *page_buf = (SD_PAGE_RAW*)write_buf[0];
-#endif
-// For speed_test
-uint16_t speed_test_timer6_counter[8];
-uint16_t speed_test_index = 0;
-uint32_t speed_test_total = 0;
+__attribute__ ((aligned)) uint8_t read_buf[256];
+__attribute__ ((aligned)) uint8_t write_buf[2][256];
+uint32_t w25q16_page = 500;
 
+  uint16_t speed_test_timer6_counter[4];
+  uint16_t speed_test_index = 0;
+  uint32_t speed_test_total = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -93,8 +83,9 @@ static void MX_SDIO_SD_Init(void);
 static void MX_RTC_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_TIM6_Init(void);
+static void MX_SPI2_Init(void);
 /* USER CODE BEGIN PFP */
-static void user_init();
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -135,13 +126,20 @@ int main(void)
   MX_USART1_UART_Init();
   MX_ADC2_Init();
   MX_DMA_Init();
+  MX_SDIO_SD_Init();
   MX_RTC_Init();
   MX_TIM4_Init();
   MX_TIM6_Init();
+  MX_SPI2_Init();
+  MX_FATFS_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start_IT(&htim4);
   HAL_TIM_Base_Start_IT(&htim6);
-  MX_SDIO_SD_Init();
+  w25q16_chip_deselect();
+  uint8_t reg_u = 0xFF, reg_l = 0xFF;;
+  mpu_init(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &reg_u);
+  mpu_init(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &reg_l);
+  // w25q16_erase_chip(&hspi2);
   // Calibrate The ADC On Power-Up For Better Accuracy
   HAL_ADCEx_Calibration_Start(&hadc1);
 
@@ -149,7 +147,6 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  user_init();
   set_state(IDLE);
   while (1)
   {
@@ -158,115 +155,44 @@ int main(void)
       set_state(IDLE);
     } else {
       set_state(COLLECTING_DATA);
+    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-#if defined(HUMAN_READABLE)
-      page_buf = (SD_PAGE*)write_buf[sd_block_address & 0x01];
-
-      for (uint8_t record_index = 0; record_index <=3; record_index++) {
-        wait_for_counter_changed();
-        speed_test_timer6_counter[0] = read_TIM6_counter();
-        srat_ADC(&hadc1, ADC_CHANNEL_1);	// PA1
-        srat_ADC(&hadc2, ADC_CHANNEL_2);	// PA2
-        adc_result[0] = read_ADC(&hadc1);
-        adc_result[1] = read_ADC(&hadc2);
-        srat_ADC(&hadc1, ADC_CHANNEL_3);	// PA3
-        srat_ADC(&hadc2, ADC_CHANNEL_4);	// PA4
-        adc_result[2] = read_ADC(&hadc1);
-        adc_result[3] = read_ADC(&hadc2);
-        speed_test_timer6_counter[1] = read_TIM6_counter();
-        // srat_ADC(&hadc1, ADC_CHANNEL_7);	// PA7
-        // uint16_t adc_PA7 = read_ADC(&hadc1);
-        mpu_get_accel_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &xyz_accel_u);
-        mpu_get_gyro_buf(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &xyz_gyro_u);
-        mpu_get_accel_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &xyz_accel_l);
-        mpu_get_gyro_buf(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &xyz_gyro_l);
-        speed_test_timer6_counter[2] = read_TIM6_counter();
-
-        // gyro lower z ------------------------------------------------------------------
-        // gyro lower y ---------------------------------------------------------------   |
-        // gyro lower x ------------------------------------------------------------   |  |
-        // accel lower z --------------------------------------------------------   |  |  |
-        // accel lower y -----------------------------------------------------   |  |  |  |
-        // accel lower x --------------------------------------------------   |  |  |  |  |
-        // gyro upper z ------------------------------------------------   |  |  |  |  |  |
-        // gyro upper y ---------------------------------------------   |  |  |  |  |  |  |
-        // gyro upper x ------------------------------------------   |  |  |  |  |  |  |  |
-        // accel upper z --------------------------------------   |  |  |  |  |  |  |  |  |
-        // accel upper y -----------------------------------   |  |  |  |  |  |  |  |  |  |
-        // accel upper x --------------------------------   |  |  |  |  |  |  |  |  |  |  |
-        //                                  a1 a2 a3 a4  |  |  |  |  |  |  |  |  |  |  |  |
-        snprintf(tmp_buf, sizeof(tmp_buf), "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,",
-            adc_result[0], adc_result[1], adc_result[2], adc_result[3],
-            xyz_accel_u.x, xyz_accel_u.y, xyz_accel_u.z, xyz_gyro_u.x, xyz_gyro_u.y, xyz_gyro_u.z,
-            xyz_accel_l.x, xyz_accel_l.y, xyz_accel_l.z, xyz_gyro_l.x, xyz_gyro_l.y, xyz_gyro_l.z);
-        HAL_RTC_GetTime(&hrtc, &rtc_time, RTC_FORMAT_BIN);
-        sd_page_print(page_buf, record_index, tmp_buf, rtc_time.Seconds);
-        speed_test_timer6_counter[3] = read_TIM6_counter();
-      }
-#ifdef SD_CARD_ENABLED
-      speed_test_timer6_counter[4] = read_TIM6_counter();
-      wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
-      HAL_StatusTypeDef sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)page_buf, sd_block_address++, 1);
-      wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
-      speed_test_timer6_counter[5] = read_TIM6_counter();
-      if (speed_test_timer6_counter[5] > speed_test_timer6_counter[0]) {
-        speed_test_timer6_counter[6] = speed_test_timer6_counter[5] - speed_test_timer6_counter[0];
-      } else {
-        speed_test_timer6_counter[6] = 25000 + speed_test_timer6_counter[5] - speed_test_timer6_counter[0];
-      }
-      speed_test_total += speed_test_timer6_counter[6];
-      ++speed_test_index;
-      if (speed_test_index >= 100) {
-        speed_test_index = 0;
-        speed_test_total = 0;
-      }
-#endif
-#elif defined(RAW_DATA_ONLY)
-      page_buf = (SD_PAGE_RAW*)write_buf[sd_block_address & 0x01];
-
-      for (uint8_t record_index = 0; record_index < 15; record_index++) {
-        uint16_t counter_uint16 = wait_for_counter_changed();
-        speed_test_timer6_counter[0] = read_TIM6_counter();
-        page_buf->data_raw_buffer[record_index].index = counter_uint16;
-        srat_ADC(&hadc1, ADC_CHANNEL_1);  // PA1
-        srat_ADC(&hadc2, ADC_CHANNEL_2);  // PA2
-        page_buf->data_raw_buffer[record_index].ad[0] = read_ADC(&hadc1);
-        page_buf->data_raw_buffer[record_index].ad[1] = read_ADC(&hadc2);
-        srat_ADC(&hadc1, ADC_CHANNEL_3);  // PA3
-        srat_ADC(&hadc2, ADC_CHANNEL_4);  // PA4
-        page_buf->data_raw_buffer[record_index].ad[2] = read_ADC(&hadc1);
-        page_buf->data_raw_buffer[record_index].ad[3] = read_ADC(&hadc2);
-        speed_test_timer6_counter[1] = read_TIM6_counter();
-        // srat_ADC(&hadc1, ADC_CHANNEL_7); // PA7
-        // uint16_t adc_PA7 = read_ADC(&hadc1);
-        i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6, page_buf->data_raw_buffer[record_index].accel_u);
-        i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6, page_buf->data_raw_buffer[record_index].gyro_u);
-        i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6, page_buf->data_raw_buffer[record_index].accel_l);
-        i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6, page_buf->data_raw_buffer[record_index].gyro_l);
-        speed_test_timer6_counter[2] = read_TIM6_counter();
-      }
-#ifdef SD_CARD_ENABLED
-      speed_test_timer6_counter[4] = read_TIM6_counter();
-      wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
-      HAL_StatusTypeDef sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)page_buf, sd_block_address++, 1);
-      wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
-      speed_test_timer6_counter[5] = read_TIM6_counter();
-      if (speed_test_timer6_counter[5] > speed_test_timer6_counter[0]) {
-        speed_test_timer6_counter[6] = speed_test_timer6_counter[5] - speed_test_timer6_counter[0];
-      } else {
-        speed_test_timer6_counter[6] = 25000 + speed_test_timer6_counter[5] - speed_test_timer6_counter[0];
-      }
-      speed_test_total += speed_test_timer6_counter[6];
-      ++speed_test_index;
-      if (speed_test_index >= 100) {
-        speed_test_index = 0;
-        speed_test_total = 0;
-      }
-#endif
-#endif // HUMAN_READABLE / RAW_DATA_ONLY
+    PAGE_RAW *page_buf = (PAGE_RAW*)write_buf[w25q16_page & 0x01];
+    for (uint8_t record_index = 0; record_index < 8; record_index++) {
+      wait_for_counter_changed();
+      speed_test_timer6_counter[0] = read_TIM6_counter();
+      srat_ADC(&hadc1, ADC_CHANNEL_1);  // PA1
+      srat_ADC(&hadc2, ADC_CHANNEL_2);  // PA2
+      page_buf->data_raw_buffer[record_index].ad[0] = read_ADC(&hadc1);
+      page_buf->data_raw_buffer[record_index].ad[1] = read_ADC(&hadc2);
+      srat_ADC(&hadc1, ADC_CHANNEL_3);  // PA3
+      srat_ADC(&hadc2, ADC_CHANNEL_4);  // PA4
+      page_buf->data_raw_buffer[record_index].ad[2] = read_ADC(&hadc1);
+      page_buf->data_raw_buffer[record_index].ad[3] = read_ADC(&hadc2);
+      i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6, page_buf->data_raw_buffer[record_index].accel_u);
+      i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6, page_buf->data_raw_buffer[record_index].gyro_u);
+      i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6, page_buf->data_raw_buffer[record_index].accel_l);
+      i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6, page_buf->data_raw_buffer[record_index].gyro_l);
     }
+    speed_test_timer6_counter[1] = read_TIM6_counter();
+    w25q16_wait_write_done(&hspi2);
+    speed_test_timer6_counter[2] = read_TIM6_counter();
+    w25q16_write(&hspi2, w25q16_page << 8, (uint8_t *)page_buf, 256);
+    speed_test_timer6_counter[3] = read_TIM6_counter();
+
+    if (speed_test_timer6_counter[3] > speed_test_timer6_counter[0]) {
+      speed_test_total += speed_test_timer6_counter[3] - speed_test_timer6_counter[0];
+    } else {
+      speed_test_total += 25000 + speed_test_timer6_counter[3] - speed_test_timer6_counter[0];
+    }
+    ++speed_test_index;
+    if (speed_test_index >= 100) {
+      speed_test_index = 0;
+      speed_test_total = 0;
+    }
+    ++w25q16_page;
   }
   /* USER CODE END 3 */
 }
@@ -512,9 +438,7 @@ static void MX_SDIO_SD_Init(void)
   /* USER CODE END SDIO_Init 0 */
 
   /* USER CODE BEGIN SDIO_Init 1 */
-#ifdef SD_CARD_ENABLED
-  STATE old_state = get_state();
-  set_state(INIT_SD_CARD);
+
   /* USER CODE END SDIO_Init 1 */
   hsd.Instance = SDIO;
   hsd.Init.ClockEdge = SDIO_CLOCK_EDGE_RISING;
@@ -523,18 +447,47 @@ static void MX_SDIO_SD_Init(void)
   hsd.Init.BusWide = SDIO_BUS_WIDE_1B;
   hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_ENABLE;
   hsd.Init.ClockDiv = 2;
-  if (HAL_SD_Init(&hsd) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_SD_ConfigWideBusOperation(&hsd, SDIO_BUS_WIDE_4B) != HAL_OK)
-  {
-    Error_Handler();
-  }
   /* USER CODE BEGIN SDIO_Init 2 */
-  set_state(old_state);
-#endif
+
   /* USER CODE END SDIO_Init 2 */
+
+}
+
+/**
+  * @brief SPI2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI2_Init(void)
+{
+
+  /* USER CODE BEGIN SPI2_Init 0 */
+
+  /* USER CODE END SPI2_Init 0 */
+
+  /* USER CODE BEGIN SPI2_Init 1 */
+
+  /* USER CODE END SPI2_Init 1 */
+  /* SPI2 parameter configuration*/
+  hspi2.Instance = SPI2;
+  hspi2.Init.Mode = SPI_MODE_MASTER;
+  hspi2.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi2.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi2.Init.NSS = SPI_NSS_SOFT;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
+  hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi2.Init.CRCPolynomial = 10;
+  if (HAL_SPI_Init(&hspi2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI2_Init 2 */
+
+  /* USER CODE END SPI2_Init 2 */
 
 }
 
@@ -559,7 +512,7 @@ static void MX_TIM4_Init(void)
   htim4.Instance = TIM4;
   htim4.Init.Prescaler = 72;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 3000;
+  htim4.Init.Period = 2000;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
@@ -683,14 +636,23 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
-  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15|GPIO_PIN_5, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12|GPIO_PIN_5, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_9, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PE2 */
+  GPIO_InitStruct.Pin = GPIO_PIN_2;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PE3 PE4 */
   GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_4;
@@ -705,18 +667,25 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PB14 */
-  GPIO_InitStruct.Pin = GPIO_PIN_14;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PB15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_15;
+  /*Configure GPIO pin : PB12 */
+  GPIO_InitStruct.Pin = GPIO_PIN_12;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PD8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_8;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PD9 */
+  GPIO_InitStruct.Pin = GPIO_PIN_9;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PB5 */
   GPIO_InitStruct.Pin = GPIO_PIN_5;
@@ -728,53 +697,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void user_init() {
-#if defined(HUMAN_READABLE)
-  sd_page_print(page_buf, 0, "STM32 Board init done.", 0);
-  uint8_t reg_u = 0xFF, reg_l = 0xFF;;
-  mpu_init(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &reg_u);
-  mpu_init(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &reg_l);
-  mpu_sen_init();
-  sd_page_print(page_buf, 1, "MPU6050 init done.", 0);
-#ifdef SD_CARD_ENABLED
-  HAL_SD_CardInfoTypeDef sd_card_info;
-  HAL_StatusTypeDef sd_op_res = HAL_SD_GetCardInfo(&hsd, &sd_card_info);
-  // sd_op_res = HAL_SD_Erase(&hsd, 0, sd_card_info.BlockNbr - 1);
-  wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
 
-  snprintf(tmp_buf, sizeof(tmp_buf), "SD Card block size %lu, block number %lu",
-      sd_card_info.BlockSize, sd_card_info.BlockNbr);
-  sd_page_print(page_buf, 2, tmp_buf, 0);
-  const char *TABLE_HEADER = "ana_1,ana_2,ana_3,ana_4,acc1x,acc1y,acc1z,gyro1x,gyro1y,gyro1z,acc1x,acc1y,acc1z,gyro1x,gyro1y,gyro1z,";
-  sd_page_print(page_buf, 3, TABLE_HEADER, 0);
-
-  wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
-  sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)page_buf, sd_block_address++, 1);
-  wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
-#endif // SD_CARD_ENABLED//
-#elif defined(RAW_DATA_ONLY)
-  uint8_t reg_u = 0xFF, reg_l = 0xFF;;
-  mpu_init(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &reg_u);
-  mpu_init(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &reg_l);
-  write_buf[0][510] = 0xFF;
-  write_buf[0][511] = 0xFF;
-  write_buf[1][510] = 0xFF;
-  write_buf[1][511] = 0xFF;
-#ifdef SD_CARD_ENABLED
-  HAL_SD_CardInfoTypeDef sd_card_info;
-  HAL_StatusTypeDef sd_op_res = HAL_SD_GetCardInfo(&hsd, &sd_card_info);
-  // sd_op_res = HAL_SD_Erase(&hsd, 0, sd_card_info.BlockNbr - 1);
-  wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
-
-  snprintf((char *)page_buf, sizeof(SD_PAGE_RAW), "SD Card block size %lu, block number %lu",
-      sd_card_info.BlockSize, sd_card_info.BlockNbr);
-
-  wait_for_sdio_state(&hsd, HAL_SD_STATE_READY);
-  sd_op_res = HAL_SD_WriteBlocks_DMA(&hsd, (uint8_t *)page_buf, sd_block_address++, 1);
-  wait_for_sd_card_state(&hsd, HAL_SD_CARD_TRANSFER);
-#endif // SD_CARD_ENABLED//
-#endif // HUMAN_READABLE
-}
 /* USER CODE END 4 */
 
 /**
@@ -785,12 +708,9 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
-  if (get_state() != INIT_SD_CARD) {
-    __disable_irq();
-  }
+  __disable_irq();
   while (1)
   {
-    ;
   }
   /* USER CODE END Error_Handler_Debug */
 }
