@@ -25,7 +25,9 @@
 /* USER CODE BEGIN Includes */
 #include "common.h"
 #include "mpu.h"
+#include "files.h"
 #include "w25q16.h"
+#include <stdio.h>
 #include <string.h>
 /* USER CODE END Includes */
 
@@ -62,13 +64,22 @@ TIM_HandleTypeDef htim6;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-__attribute__ ((aligned)) uint8_t read_buf[256];
-__attribute__ ((aligned)) uint8_t write_buf[2][256];
-uint32_t w25q16_page = 500;
-
-  uint16_t speed_test_timer6_counter[4];
-  uint16_t speed_test_index = 0;
-  uint32_t speed_test_total = 0;
+__attribute__ ((aligned)) uint8_t flash_read_buf[W25Q16_PAGE_SIZE];
+__attribute__ ((aligned)) uint8_t flash_write_buf[2][W25Q16_PAGE_SIZE];
+__attribute__ ((aligned)) uint8_t csv_data_buf[128];
+int cvs_data_len = 0;
+PAGE_RAW *page_buf_read = NULL;
+PAGE_RAW *page_buf_write = NULL;
+uint32_t w25q16_write_page_index = 0;
+W25Q16_T w25q16_info;
+uint16_t file_index = 0;
+XYZ_INT16T xyz_accel_u, xyz_gyro_u, xyz_accel_l, xyz_gyro_l;
+// #define SPEED_TEST 1
+#ifdef SPEED_TEST
+uint16_t speed_test_timer6_counter[4];
+uint16_t speed_test_index = 0;
+uint32_t speed_test_total = 0;
+#endif // SPEED_TEST
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -100,7 +111,7 @@ static void MX_SPI2_Init(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
+  set_state(INIT);
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -136,13 +147,20 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim4);
   HAL_TIM_Base_Start_IT(&htim6);
   w25q16_chip_deselect();
+  MX_SDIO_SD_Init();
   uint8_t reg_u = 0xFF, reg_l = 0xFF;;
   mpu_init(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &reg_u);
   mpu_init(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &reg_l);
+  if(f_mount(&SDFatFS, (TCHAR const*)SDPath, 0) != FR_OK) {
+    Error_Handler();
+  }
+  w25q16_init(&hspi2, &w25q16_info);
+  if (w25q16_info.PageCount == 0) {
+    Error_Handler();
+  }
   // w25q16_erase_chip(&hspi2);
   // Calibrate The ADC On Power-Up For Better Accuracy
   HAL_ADCEx_Calibration_Start(&hadc1);
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -151,49 +169,109 @@ int main(void)
   while (1)
   {
     write_LED0(read_ext_sw()); // A test to make sure code is running
-    if (ext_key_start() != 1) {
-      set_state(IDLE);
-    } else {
-      set_state(COLLECTING_DATA);
-    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    PAGE_RAW *page_buf = (PAGE_RAW*)write_buf[w25q16_page & 0x01];
-    for (uint8_t record_index = 0; record_index < 8; record_index++) {
-      wait_for_counter_changed();
-      speed_test_timer6_counter[0] = read_TIM6_counter();
-      srat_ADC(&hadc1, ADC_CHANNEL_1);  // PA1
-      srat_ADC(&hadc2, ADC_CHANNEL_2);  // PA2
-      page_buf->data_raw_buffer[record_index].ad[0] = read_ADC(&hadc1);
-      page_buf->data_raw_buffer[record_index].ad[1] = read_ADC(&hadc2);
-      srat_ADC(&hadc1, ADC_CHANNEL_3);  // PA3
-      srat_ADC(&hadc2, ADC_CHANNEL_4);  // PA4
-      page_buf->data_raw_buffer[record_index].ad[2] = read_ADC(&hadc1);
-      page_buf->data_raw_buffer[record_index].ad[3] = read_ADC(&hadc2);
-      i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6, page_buf->data_raw_buffer[record_index].accel_u);
-      i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6, page_buf->data_raw_buffer[record_index].gyro_u);
-      i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6, page_buf->data_raw_buffer[record_index].accel_l);
-      i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6, page_buf->data_raw_buffer[record_index].gyro_l);
-    }
-    speed_test_timer6_counter[1] = read_TIM6_counter();
-    w25q16_wait_write_done(&hspi2);
-    speed_test_timer6_counter[2] = read_TIM6_counter();
-    w25q16_write(&hspi2, w25q16_page << 8, (uint8_t *)page_buf, 256);
-    speed_test_timer6_counter[3] = read_TIM6_counter();
+    STATE state = check_state();
+    switch (state) {
+    case COLLECTING_DATA:
+      page_buf_write = (PAGE_RAW*)flash_write_buf[w25q16_write_page_index & 0x01];
+      for (uint8_t record_index = 0; record_index < 8; record_index++) {
+        wait_for_counter_changed();
+#ifdef SPEED_TEST
+        speed_test_timer6_counter[0] = read_TIM6_counter();
+#endif // SPEED_TEST
+        srat_ADC(&hadc1, ADC_CHANNEL_1);  // PA1
+        srat_ADC(&hadc2, ADC_CHANNEL_2);  // PA2
+        page_buf_write->data_raw_buffer[record_index].ad[0] = read_ADC(&hadc1);
+        page_buf_write->data_raw_buffer[record_index].ad[1] = read_ADC(&hadc2);
+        srat_ADC(&hadc1, ADC_CHANNEL_3);  // PA3
+        srat_ADC(&hadc2, ADC_CHANNEL_4);  // PA4
+        page_buf_write->data_raw_buffer[record_index].ad[2] = read_ADC(&hadc1);
+        page_buf_write->data_raw_buffer[record_index].ad[3] = read_ADC(&hadc2);
+        i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6, page_buf_write->data_raw_buffer[record_index].accel_u);
+        i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6, page_buf_write->data_raw_buffer[record_index].gyro_u);
+        i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6, page_buf_write->data_raw_buffer[record_index].accel_l);
+        i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6, page_buf_write->data_raw_buffer[record_index].gyro_l);
+      }
+#ifdef SPEED_TEST
+      speed_test_timer6_counter[1] = read_TIM6_counter();
+#endif // SPEED_TEST
+      w25q16_wait_write_done(&hspi2);
+#ifdef SPEED_TEST
+      speed_test_timer6_counter[2] = read_TIM6_counter();
+#endif // SPEED_TEST
+      w25q16_write(&hspi2, w25q16_write_page_index << 8, (uint8_t *)page_buf_write, W25Q16_PAGE_SIZE);
+#ifdef SPEED_TEST
+      speed_test_timer6_counter[3] = read_TIM6_counter();
 
-    if (speed_test_timer6_counter[3] > speed_test_timer6_counter[0]) {
-      speed_test_total += speed_test_timer6_counter[3] - speed_test_timer6_counter[0];
-    } else {
-      speed_test_total += 25000 + speed_test_timer6_counter[3] - speed_test_timer6_counter[0];
+      if (speed_test_timer6_counter[3] > speed_test_timer6_counter[0]) {
+        speed_test_total += speed_test_timer6_counter[3] - speed_test_timer6_counter[0];
+      } else {
+        speed_test_total += 25000 + speed_test_timer6_counter[3] - speed_test_timer6_counter[0];
+      }
+      ++speed_test_index;
+      if (speed_test_index >= 100) {
+        speed_test_index = 0;
+        speed_test_total = 0;
+      }
+#endif // SPEED_TEST
+      ++w25q16_write_page_index;
+      if (w25q16_write_page_index >= w25q16_info.PageCount) {
+        set_state(SAVE_TO_FILE);
+        w25q16_write_page_index = 0;
+      }
+      break;
+    case SAVE_TO_FILE:
+      file_index = get_file_index();
+      char data_file_name[16];
+      snprintf(data_file_name, 15, "dr%06d.txt", file_index);
+      if(f_open(&SDFile, data_file_name, FA_CREATE_NEW | FA_WRITE) != FR_OK)
+      {
+        Error_Handler();
+      } else {
+        for (uint32_t w25q16_read_page_index = 0; w25q16_read_page_index < w25q16_info.PageCount; w25q16_read_page_index++) {
+          w25q16_read(&hspi2, w25q16_read_page_index << 8, flash_read_buf, W25Q16_PAGE_SIZE);
+          page_buf_read = (PAGE_RAW*)flash_read_buf;
+          for (uint8_t record_index = 0; record_index < 8; record_index++) {
+            mpu_get_accel(page_buf_read->data_raw_buffer[record_index].accel_u, &xyz_accel_u);
+            mpu_get_gyro(page_buf_read->data_raw_buffer[record_index].gyro_u, &xyz_gyro_u);
+            mpu_get_accel(page_buf_read->data_raw_buffer[record_index].accel_l, &xyz_accel_l);
+            mpu_get_gyro(page_buf_read->data_raw_buffer[record_index].gyro_l, &xyz_gyro_l);
+
+                                        // gyro lower z ------------------------------------------------
+                                        // gyro lower y ---------------------------------------------   |
+                                        // gyro lower x ------------------------------------------   |  |
+                                        // accel lower z --------------------------------------   |  |  |
+                                        // accel lower y -----------------------------------   |  |  |  |
+                                        // accel lower x --------------------------------   |  |  |  |  |
+                                        // gyro upper z ------------------------------   |  |  |  |  |  |
+                                        // gyro upper y ---------------------------   |  |  |  |  |  |  |
+                                        // gyro upper x ------------------------   |  |  |  |  |  |  |  |
+                                        // accel upper z --------------------   |  |  |  |  |  |  |  |  |
+                                        // accel upper y -----------------   |  |  |  |  |  |  |  |  |  |
+                                        // accel upper x --------------   |  |  |  |  |  |  |  |  |  |  |
+                                        //                a1 a2 a3 a4  |  |  |  |  |  |  |  |  |  |  |  |
+            cvs_data_len = snprintf(csv_data_buf, sizeof(csv_data_buf), "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,",
+                page_buf_read->data_raw_buffer[record_index].ad[0],
+                page_buf_read->data_raw_buffer[record_index].ad[1],
+                page_buf_read->data_raw_buffer[record_index].ad[2],
+                page_buf_read->data_raw_buffer[record_index].ad[3],
+                xyz_accel_u.x, xyz_accel_u.y, xyz_accel_u.z, xyz_gyro_u.x, xyz_gyro_u.y, xyz_gyro_u.z,
+                xyz_accel_l.x, xyz_accel_l.y, xyz_accel_l.z, xyz_gyro_l.x, xyz_gyro_l.y, xyz_gyro_l.z);
+            write_data_record(csv_data_buf, cvs_data_len);
+          }
+        }
+        w25q16_erase_chip(&hspi2);
+        set_state(IDLE);
+        f_close(&SDFile);
+      }
+      break;
+    default:
+      break;
     }
-    ++speed_test_index;
-    if (speed_test_index >= 100) {
-      speed_test_index = 0;
-      speed_test_total = 0;
-    }
-    ++w25q16_page;
   }
+  // f_mount(&SDFatFS, (TCHAR const*)NULL, 0);
   /* USER CODE END 3 */
 }
 
@@ -476,7 +554,7 @@ static void MX_SPI2_Init(void)
   hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi2.Init.NSS = SPI_NSS_SOFT;
-  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
   hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;

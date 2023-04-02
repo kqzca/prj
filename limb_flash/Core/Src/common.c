@@ -12,12 +12,21 @@
 #include <stdint.h>
 #include <stdio.h>
 
-STATE state = INIT;
-STATE get_state() {
-  return state;
+STATE running_state = INIT;
+STATE check_state() {
+  if (ext_key_start() == 1) {
+    if (running_state == IDLE) {
+      set_state(COLLECTING_DATA);
+    }
+  } else {
+    if (running_state == COLLECTING_DATA) {
+      set_state(SAVE_TO_FILE);
+    }
+  }
+  return running_state;
 }
 void set_state(STATE _state) {
-  state = _state;
+  running_state = _state;
 }
 
 uint32_t counterValue = 0, oldCounterValue = 0;
@@ -51,7 +60,7 @@ inline void write_LEDExt(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOD, GPIO_PI
 void increase_250ms_counter() {
   static uint32_t counter_250ms = 0;
   ++counter_250ms;
-  switch(state) {
+  switch(running_state) {
   case INIT:
     write_LEDExt(((counter_250ms & 0x04) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
     break;
@@ -61,8 +70,7 @@ void increase_250ms_counter() {
   case COLLECTING_DATA:
     write_LEDExt(((counter_250ms & 0x02) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
     break;
-  case INIT_SD_CARD:
-  case UNKNOWN:
+  case SAVE_TO_FILE:
   default:
     write_LEDExt(((counter_250ms & 0x01) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
     break;

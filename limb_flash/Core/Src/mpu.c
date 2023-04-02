@@ -50,31 +50,32 @@ inline HAL_StatusTypeDef i2c_read_regs(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr
 	return HAL_I2C_Mem_Read(hi2c, i2c_addr, reg, I2C_MEMADD_SIZE_8BIT, buffer, len, 1);
 }
 
-HAL_StatusTypeDef mpu_get_accel_buf(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, XYZ_INT16T *xyz) {
-	HAL_StatusTypeDef res = i2c_read_regs(hi2c, i2c_addr, MPU6XXX_RA_ACCEL_XOUT_H, 6, i2c_read_buffer);
-	if (res == HAL_OK) {
-    int16_t x = ((uint16_t)i2c_read_buffer[0] << 8) + i2c_read_buffer[1];
-    int16_t y = ((uint16_t)i2c_read_buffer[2] << 8) + i2c_read_buffer[3];
-    int16_t z = ((uint16_t)i2c_read_buffer[4] << 8) + i2c_read_buffer[5];
+inline HAL_StatusTypeDef mpu_get_accel_buf(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, XYZ_INT16T *xyz) {
+  return i2c_read_regs(hi2c, i2c_addr, MPU6XXX_RA_ACCEL_XOUT_H, 6, i2c_read_buffer);
+}
 
-    xyz->x = (int32_t)x * 1000 / accel_sen;
-    xyz->y = (int32_t)y * 1000 / accel_sen;
-    xyz->z = (int32_t)z * 1000 / accel_sen;
-	}
-  return res;
+void mpu_get_accel(uint8_t *buf_6_bytes, XYZ_INT16T *xyz) {
+  int16_t x = ((uint16_t)buf_6_bytes[0] << 8) + buf_6_bytes[1];
+  int16_t y = ((uint16_t)buf_6_bytes[2] << 8) + buf_6_bytes[3];
+  int16_t z = ((uint16_t)buf_6_bytes[4] << 8) + buf_6_bytes[5];
+
+  xyz->x = (int32_t)x * 1000 / accel_sen;
+  xyz->y = (int32_t)y * 1000 / accel_sen;
+  xyz->z = (int32_t)z * 1000 / accel_sen;
 }
 
 HAL_StatusTypeDef mpu_get_gyro_buf(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, XYZ_INT16T *xyz) {
-	HAL_StatusTypeDef res = i2c_read_regs(hi2c, i2c_addr, MPU6XXX_RA_GYRO_XOUT_H, 6, i2c_read_buffer);
-  if (res == HAL_OK) {
-    int16_t x = ((uint16_t)i2c_read_buffer[0] << 8) + i2c_read_buffer[1];
-    int16_t y = ((uint16_t)i2c_read_buffer[2] << 8) + i2c_read_buffer[3];
-    int16_t z = ((uint16_t)i2c_read_buffer[4] << 8) + i2c_read_buffer[5];
-    xyz->x = (int32_t)x * 100 / gyro_sen;
-    xyz->y = (int32_t)y * 100 / gyro_sen;
-    xyz->z = (int32_t)z * 100 / gyro_sen;
-  }
-  return res;
+	return i2c_read_regs(hi2c, i2c_addr, MPU6XXX_RA_GYRO_XOUT_H, 6, i2c_read_buffer);
+}
+
+void mpu_get_gyro(uint8_t *buf_6_bytes, XYZ_INT16T *xyz) {
+  int16_t x = ((uint16_t)buf_6_bytes[0] << 8) + buf_6_bytes[1];
+  int16_t y = ((uint16_t)buf_6_bytes[2] << 8) + buf_6_bytes[3];
+  int16_t z = ((uint16_t)buf_6_bytes[4] << 8) + buf_6_bytes[5];
+
+  xyz->x = (int32_t)x * 100 / gyro_sen;
+  xyz->y = (int32_t)y * 100 / gyro_sen;
+  xyz->z = (int32_t)z * 100 / gyro_sen;
 }
 
 // If needed, MPU6XXX_RA_XA_OFFS_H for getting accel offset and MPU6XXX_RA_XG_OFFS_USRH for gyro offset

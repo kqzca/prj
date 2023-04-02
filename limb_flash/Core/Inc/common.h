@@ -29,10 +29,9 @@ typedef enum _STATE
     INIT = 0,
     IDLE,
     COLLECTING_DATA,
-    INIT_SD_CARD,
-    UNKNOWN
+    SAVE_TO_FILE
 } STATE;
-STATE get_state();
+STATE check_state();
 void set_state(STATE _state);
 
 uint32_t get_counter();
