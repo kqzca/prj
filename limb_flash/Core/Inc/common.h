@@ -26,10 +26,10 @@ typedef struct _PAGE_RAW
 
 typedef enum _STATE
 {
-    INIT = 0,
-    IDLE,
+    NOT_READY = 0,
+    READY_IDLE,
     COLLECTING_DATA,
-    SAVE_TO_FILE
+    SAVEING_TO_FILE,
 } STATE;
 STATE check_state();
 void set_state(STATE _state);

@@ -35,12 +35,8 @@ static const MPU_CONFIG mpu_config = {
   MPU6XXX_GYRO_RANGE_250DPS,
   MPU6XXX_DLPF_DISABLE,
   MPU6XXX_SLEEP_DISABLE,
-  8000
+  1000
 };
-static const uint16_t MPU6XXX_ACCEL_SEN = 16384;
-static const uint16_t MPU6XXX_GYRO_SEN = 1310;
-static uint16_t accel_sen = MPU6XXX_ACCEL_SEN;
-static uint16_t gyro_sen = MPU6XXX_GYRO_SEN;
 
 inline HAL_StatusTypeDef i2c_write_reg(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t reg, uint8_t data) {
 	return HAL_I2C_Mem_Write(hi2c, i2c_addr, reg, I2C_MEMADD_SIZE_8BIT, &data, 1, 1);
@@ -55,13 +51,9 @@ inline HAL_StatusTypeDef mpu_get_accel_buf(I2C_HandleTypeDef *hi2c, uint8_t i2c_
 }
 
 void mpu_get_accel(uint8_t *buf_6_bytes, XYZ_INT16T *xyz) {
-  int16_t x = ((uint16_t)buf_6_bytes[0] << 8) + buf_6_bytes[1];
-  int16_t y = ((uint16_t)buf_6_bytes[2] << 8) + buf_6_bytes[3];
-  int16_t z = ((uint16_t)buf_6_bytes[4] << 8) + buf_6_bytes[5];
-
-  xyz->x = (int32_t)x * 1000 / accel_sen;
-  xyz->y = (int32_t)y * 1000 / accel_sen;
-  xyz->z = (int32_t)z * 1000 / accel_sen;
+  xyz->x = ((uint16_t)buf_6_bytes[0] << 8) + buf_6_bytes[1];
+  xyz->y = ((uint16_t)buf_6_bytes[2] << 8) + buf_6_bytes[3];
+  xyz->z = ((uint16_t)buf_6_bytes[4] << 8) + buf_6_bytes[5];
 }
 
 HAL_StatusTypeDef mpu_get_gyro_buf(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, XYZ_INT16T *xyz) {
@@ -69,13 +61,9 @@ HAL_StatusTypeDef mpu_get_gyro_buf(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, XY
 }
 
 void mpu_get_gyro(uint8_t *buf_6_bytes, XYZ_INT16T *xyz) {
-  int16_t x = ((uint16_t)buf_6_bytes[0] << 8) + buf_6_bytes[1];
-  int16_t y = ((uint16_t)buf_6_bytes[2] << 8) + buf_6_bytes[3];
-  int16_t z = ((uint16_t)buf_6_bytes[4] << 8) + buf_6_bytes[5];
-
-  xyz->x = (int32_t)x * 100 / gyro_sen;
-  xyz->y = (int32_t)y * 100 / gyro_sen;
-  xyz->z = (int32_t)z * 100 / gyro_sen;
+  xyz->x = ((uint16_t)buf_6_bytes[0] << 8) + buf_6_bytes[1];
+  xyz->y = ((uint16_t)buf_6_bytes[2] << 8) + buf_6_bytes[3];
+  xyz->z = ((uint16_t)buf_6_bytes[4] << 8) + buf_6_bytes[5];
 }
 
 // If needed, MPU6XXX_RA_XA_OFFS_H for getting accel offset and MPU6XXX_RA_XG_OFFS_USRH for gyro offset
@@ -174,11 +162,6 @@ static HAL_StatusTypeDef mpu_set_param(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr
     }
 
     return res;
-}
-
-inline void mpu_sen_init() {
-  accel_sen = MPU6XXX_ACCEL_SEN >> mpu_config.mpu_accel_range;
-  gyro_sen = MPU6XXX_GYRO_SEN >> mpu_config.mpu_gyro_range;
 }
 
 HAL_StatusTypeDef mpu_init(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t *reg)

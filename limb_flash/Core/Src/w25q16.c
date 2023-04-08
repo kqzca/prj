@@ -83,25 +83,22 @@ void w25q16_erase_chip(SPI_HandleTypeDef *hspi)
 }
 
 void w25q16_read(SPI_HandleTypeDef *hspi, uint32_t addr, uint8_t *buf, uint16_t len) {
-  static const uint8_t CMD_FAST_READ = 0x0B;
-
+  static const uint8_t CMD_READ = 0x03;
+  uint8_t to_transmit[4];
+  to_transmit[0] = CMD_READ;
+  to_transmit[1] = (addr & 0x00FF0000) >> 16;
+  to_transmit[2] = (addr & 0x0000FF00) >> 8;
+  to_transmit[3] = (addr & 0x000000FF);
   w25q16_chip_select();
-  HAL_SPI_Transmit(hspi, &CMD_FAST_READ, 1, 1);
-  uint8_t to_transmit = (addr & 0x00FF0000) >> 16;
-  HAL_SPI_Transmit(hspi, &to_transmit, 1, 1);
-  to_transmit = (addr & 0x0000FF00) >> 8;
-  HAL_SPI_Transmit(hspi, &to_transmit, 1, 1);
-  to_transmit = (addr & 0x000000FF);
-  HAL_SPI_Transmit(hspi, &to_transmit, 1, 1);
-  to_transmit = 0;
-  HAL_SPI_Transmit(hspi, &to_transmit, 1, 1);
+  HAL_SPI_Transmit(hspi, &to_transmit, 4, 1);
   HAL_SPI_Receive(hspi, buf, len, 1);
   w25q16_chip_deselect();
 }
 
 void w25q16_write(SPI_HandleTypeDef *hspi, uint32_t addr, uint8_t *buf, uint16_t len) {
+  static const uint8_t CMD_WRITE = 0x02;
   uint8_t to_transmit[4];
-  to_transmit[0] = 0x02;
+  to_transmit[0] = CMD_WRITE;
   to_transmit[1] = (addr & 0x00FF0000) >> 16;
   to_transmit[2] = (addr & 0x0000FF00) >> 8;
   to_transmit[3] = (addr & 0x000000FF);

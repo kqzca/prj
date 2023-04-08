@@ -12,16 +12,23 @@
 #include <stdint.h>
 #include <stdio.h>
 
-STATE running_state = INIT;
+STATE running_state = NOT_READY;
 STATE check_state() {
-  if (ext_key_start() == 1) {
-    if (running_state == IDLE) {
+  switch(running_state) {
+  case READY_IDLE:
+    if (ext_key_start() == 1) {
       set_state(COLLECTING_DATA);
     }
-  } else {
-    if (running_state == COLLECTING_DATA) {
-      set_state(SAVE_TO_FILE);
+    break;
+  case COLLECTING_DATA:
+    if (ext_key_start() == 0) {
+      set_state(SAVEING_TO_FILE);
     }
+    break;
+  case SAVEING_TO_FILE:
+  case NOT_READY:
+  default:
+    break;
   }
   return running_state;
 }
@@ -61,16 +68,16 @@ void increase_250ms_counter() {
   static uint32_t counter_250ms = 0;
   ++counter_250ms;
   switch(running_state) {
-  case INIT:
-    write_LEDExt(((counter_250ms & 0x04) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
-    break;
-  case IDLE:
+  case READY_IDLE:
     write_LEDExt(GPIO_PIN_SET);
     break;
   case COLLECTING_DATA:
     write_LEDExt(((counter_250ms & 0x02) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
     break;
-  case SAVE_TO_FILE:
+  case SAVEING_TO_FILE:
+    write_LEDExt(((counter_250ms & 0x04) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
+    break;
+  case NOT_READY:
   default:
     write_LEDExt(((counter_250ms & 0x01) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
     break;

@@ -24,23 +24,26 @@ uint8_t BSP_SD_IsDetected(void)
 }
 
 uint16_t get_file_index() {
-  if(f_open(&SDFile, INDEX_FILE_NAME, FA_OPEN_EXISTING | FA_READ | FA_WRITE) != FR_OK)
+  uint16_t index = 0;
+  if(f_open(&SDFile, INDEX_FILE_NAME, FA_OPEN_EXISTING | FA_READ) == FR_OK)
   {
+    fatfs_res = f_read(&SDFile, read_buf, _MAX_SS, (void *)&bytesread);
+    f_close(&SDFile);
+    if((bytesread > 0) && (fatfs_res == FR_OK)) {
+      index = strtoul(read_buf, NULL, 0);
+    }
+  }
+  ++index;
+  if(f_open(&SDFile, INDEX_FILE_NAME, FA_CREATE_ALWAYS | FA_WRITE) != FR_OK) {
     return 0;
   } else {
-    fatfs_res = f_read(&SDFile, read_buf, _MAX_SS, (void *)&bytesread);
-    if((bytesread == 0) || (fatfs_res != FR_OK)) {
+    snprintf(write_buf, 16, "%d\r\n", index);
+    fatfs_res = f_write(&SDFile, write_buf, strlen(write_buf), (void *)&byteswritten);
+    f_close(&SDFile);
+    if (fatfs_res != FR_OK) {
       return 0;
     } else {
-      uint16_t index = strtoul(read_buf, NULL, 0);
-      snprintf(write_buf, 16, "%d\r\n", ++index);
-      fatfs_res = f_write(&SDFile, write_buf, strlen(write_buf), (void *)&byteswritten);
-      f_close(&SDFile);
-      if (fatfs_res != FR_OK) {
-        return 0;
-      } else {
-        return index;
-      }
+      return index;
     }
   }
 }

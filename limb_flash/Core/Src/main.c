@@ -111,7 +111,7 @@ static void MX_SPI2_Init(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-  set_state(INIT);
+  set_state(NOT_READY);
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -158,14 +158,34 @@ int main(void)
   if (w25q16_info.PageCount == 0) {
     Error_Handler();
   }
-  // w25q16_erase_chip(&hspi2);
+  w25q16_erase_chip(&hspi2);
+  w25q16_wait_write_done(&hspi2);
   // Calibrate The ADC On Power-Up For Better Accuracy
   HAL_ADCEx_Calibration_Start(&hadc1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  set_state(IDLE);
+#define FLASH_TEST
+#ifdef FLASH_TEST
+  for (int i = 0;  i< 256; i++) {
+    page_buf_write = (PAGE_RAW*)flash_write_buf[w25q16_write_page_index & 0x01];
+    memset(page_buf_write, i, W25Q16_PAGE_SIZE);
+    w25q16_wait_write_done(&hspi2);
+    w25q16_write(&hspi2, w25q16_write_page_index << 8, (uint8_t *)page_buf_write, W25Q16_PAGE_SIZE);
+    w25q16_write_page_index++;
+  }
+  w25q16_wait_write_done(&hspi2);
+  for (uint32_t w25q16_read_page_index = 0; w25q16_read_page_index < w25q16_write_page_index; w25q16_read_page_index++) {
+    w25q16_read(&hspi2, w25q16_read_page_index << 8, flash_read_buf, W25Q16_PAGE_SIZE);
+    if (flash_read_buf[W25Q16_PAGE_SIZE - 1] != w25q16_read_page_index) {
+      w25q16_read(&hspi2, w25q16_read_page_index << 8, flash_read_buf, W25Q16_PAGE_SIZE);
+    }
+  }
+  w25q16_write_page_index = 0;
+#endif
+
+  set_state(READY_IDLE);
   while (1)
   {
     write_LED0(read_ext_sw()); // A test to make sure code is running
@@ -218,19 +238,24 @@ int main(void)
 #endif // SPEED_TEST
       ++w25q16_write_page_index;
       if (w25q16_write_page_index >= w25q16_info.PageCount) {
-        set_state(SAVE_TO_FILE);
-        w25q16_write_page_index = 0;
+        set_state(SAVEING_TO_FILE);
       }
       break;
-    case SAVE_TO_FILE:
+    case SAVEING_TO_FILE:
       file_index = get_file_index();
+      if (file_index == 0) {
+        set_state(NOT_READY);
+        Error_Handler();
+      }
       char data_file_name[16];
-      snprintf(data_file_name, 15, "dr%06d.txt", file_index);
-      if(f_open(&SDFile, data_file_name, FA_CREATE_NEW | FA_WRITE) != FR_OK)
+      snprintf(data_file_name, 15, "dr%06d.csv", file_index);
+      if(f_open(&SDFile, data_file_name, FA_CREATE_ALWAYS | FA_WRITE) != FR_OK)
       {
+        set_state(NOT_READY);
         Error_Handler();
       } else {
-        for (uint32_t w25q16_read_page_index = 0; w25q16_read_page_index < w25q16_info.PageCount; w25q16_read_page_index++) {
+        w25q16_wait_write_done(&hspi2);
+        for (uint32_t w25q16_read_page_index = 0; w25q16_read_page_index < w25q16_write_page_index; w25q16_read_page_index++) {
           w25q16_read(&hspi2, w25q16_read_page_index << 8, flash_read_buf, W25Q16_PAGE_SIZE);
           page_buf_read = (PAGE_RAW*)flash_read_buf;
           for (uint8_t record_index = 0; record_index < 8; record_index++) {
@@ -239,20 +264,23 @@ int main(void)
             mpu_get_accel(page_buf_read->data_raw_buffer[record_index].accel_l, &xyz_accel_l);
             mpu_get_gyro(page_buf_read->data_raw_buffer[record_index].gyro_l, &xyz_gyro_l);
 
-                                        // gyro lower z ------------------------------------------------
-                                        // gyro lower y ---------------------------------------------   |
-                                        // gyro lower x ------------------------------------------   |  |
-                                        // accel lower z --------------------------------------   |  |  |
-                                        // accel lower y -----------------------------------   |  |  |  |
-                                        // accel lower x --------------------------------   |  |  |  |  |
-                                        // gyro upper z ------------------------------   |  |  |  |  |  |
-                                        // gyro upper y ---------------------------   |  |  |  |  |  |  |
-                                        // gyro upper x ------------------------   |  |  |  |  |  |  |  |
-                                        // accel upper z --------------------   |  |  |  |  |  |  |  |  |
-                                        // accel upper y -----------------   |  |  |  |  |  |  |  |  |  |
-                                        // accel upper x --------------   |  |  |  |  |  |  |  |  |  |  |
-                                        //                a1 a2 a3 a4  |  |  |  |  |  |  |  |  |  |  |  |
-            cvs_data_len = snprintf(csv_data_buf, sizeof(csv_data_buf), "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,",
+            cvs_data_len = snprintf(csv_data_buf, sizeof(csv_data_buf),
+            /*
+             * gyro lower z -----------------------------------
+             * gyro lower y --------------------------------   |
+             * gyro lower x -----------------------------   |  |
+             * accel lower z -------------------------   |  |  |
+             * accel lower y ----------------------   |  |  |  |
+             * accel lower x -------------------   |  |  |  |  |
+             * gyro upper z -----------------   |  |  |  |  |  |
+             * gyro upper y --------------   |  |  |  |  |  |  |
+             * gyro upper x -----------   |  |  |  |  |  |  |  |
+             * accel upper z -------   |  |  |  |  |  |  |  |  |
+             * accel upper y-----   |  |  |  |  |  |  |  |  |  |
+             * accel upper x--   |  |  |  |  |  |  |  |  |  |  |
+             *   a1 a2 a3 a4  |  |  |  |  |  |  |  |  |  |  |  |
+             *    |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |       */
+                "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\r\n",
                 page_buf_read->data_raw_buffer[record_index].ad[0],
                 page_buf_read->data_raw_buffer[record_index].ad[1],
                 page_buf_read->data_raw_buffer[record_index].ad[2],
@@ -263,7 +291,9 @@ int main(void)
           }
         }
         w25q16_erase_chip(&hspi2);
-        set_state(IDLE);
+        w25q16_wait_write_done(&hspi2);
+        w25q16_write_page_index = 0;
+        set_state(READY_IDLE);
         f_close(&SDFile);
       }
       break;

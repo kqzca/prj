@@ -80,7 +80,6 @@ typedef struct _MPU_CONFIG
 #define IMU_L_I2C_ADDR_SHIFTED  (MPU6XXX_ADDRESS_AD0_LOW << 1)
 #define IMU_U_I2C_ADDR_SHIFTED  (MPU6XXX_ADDRESS_AD0_HIGH << 1)
 
-void mpu_sen_init();
 HAL_StatusTypeDef i2c_write_reg(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t reg, uint8_t data);
 HAL_StatusTypeDef i2c_read_regs(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t reg, uint8_t len, uint8_t *buffer);
 HAL_StatusTypeDef mpu_init(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t *reg);
