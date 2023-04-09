@@ -68,8 +68,8 @@ UART_HandleTypeDef huart1;
 __attribute__ ((aligned)) uint8_t flash_read_buf[W25Q16_PAGE_SIZE];
 __attribute__ ((aligned)) uint8_t flash_write_buf[2][W25Q16_PAGE_SIZE];
 __attribute__ ((aligned)) uint8_t flash_checksum_buf[W25Q16_PAGE_SIZE];
-__attribute__ ((aligned)) uint8_t csv_data_buf[128];
-int cvs_data_len = 0;
+__attribute__ ((aligned)) uint8_t csv_data_buf[CVS_DATA_SIZE_MAX];
+int32_t cvs_data_len = 0;
 PAGE_RAW *page_buf_read = NULL;
 PAGE_RAW *page_buf_write = NULL;
 uint16_t write_page_index = 0;
@@ -150,7 +150,6 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim4);
   HAL_TIM_Base_Start_IT(&htim6);
   w25q16_chip_deselect();
-  MX_SDIO_SD_Init();
   uint8_t reg_u = 0xFF, reg_l = 0xFF;;
   mpu_init(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &reg_u);
   mpu_init(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &reg_l);
@@ -196,7 +195,6 @@ int main(void)
   set_state(READY_IDLE);
   while (1)
   {
-    write_LED0(read_ext_sw()); // A test to make sure code is running
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -284,7 +282,7 @@ int main(void)
         flash_checksum_buf[checksum_store.checksum_index] = checksum;
         w25q16_wait_write_done(&hspi2);
         w25q16_write(&hspi2,
-            (checksum_store.checksum_page_start + checksum_store.checksum_page_index++) << 8,
+            (checksum_store.checksum_page_start + checksum_store.checksum_page_index) << 8,
             flash_checksum_buf, W25Q16_PAGE_SIZE);
         checksum_store.checksum_index = 0;
         checksum_store.checksum_page_index = 0;
@@ -302,6 +300,9 @@ int main(void)
         set_state(NOT_READY);
         Error_Handler();
       } else {
+        cvs_data_len = snprintf(csv_data_buf, CVS_DATA_SIZE_MAX, "file,%d,,page,%ld,max,%d,,records,%ld\r\n",
+            file_index, write_page_index, checksum_store.checksum_page_start, write_page_index * 8);
+        write_data_record(csv_data_buf, cvs_data_len);
         w25q16_wait_write_done(&hspi2);
         for (uint32_t read_page_index = 0; read_page_index < write_page_index; read_page_index++) {
           // read checksume first
@@ -312,7 +313,7 @@ int main(void)
           uint8_t read_again = 0;
           w25q16_read(&hspi2, read_page_index << 8, flash_read_buf, W25Q16_PAGE_SIZE);
           uint8_t read_checksum = calculate_checksum(flash_read_buf, W25Q16_PAGE_SIZE);
-          while ((read_checksum != stored_checksum) && (read_again < 8)) {
+          while ((read_checksum != stored_checksum) && (read_again <= 3)) {
             read_again++;
             HAL_Delay(1);
             w25q16_read(&hspi2, read_page_index << 8, flash_read_buf, W25Q16_PAGE_SIZE);
@@ -326,7 +327,7 @@ int main(void)
             mpu_get_accel(page_buf_read->data_raw_buffer[record_index].accel_l, &xyz_accel_l);
             mpu_get_gyro(page_buf_read->data_raw_buffer[record_index].gyro_l, &xyz_gyro_l);
 
-            cvs_data_len = snprintf(csv_data_buf, sizeof(csv_data_buf),
+            cvs_data_len = snprintf(csv_data_buf, CVS_DATA_SIZE_MAX,
             /*
              * gyro lower z -----------------------------------
              * gyro lower y --------------------------------   |
