@@ -28,6 +28,7 @@
 #include "files.h"
 #include "w25q16.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 /* USER CODE END Includes */
 
@@ -66,13 +67,15 @@ UART_HandleTypeDef huart1;
 /* USER CODE BEGIN PV */
 __attribute__ ((aligned)) uint8_t flash_read_buf[W25Q16_PAGE_SIZE];
 __attribute__ ((aligned)) uint8_t flash_write_buf[2][W25Q16_PAGE_SIZE];
+__attribute__ ((aligned)) uint8_t flash_checksum_buf[W25Q16_PAGE_SIZE];
 __attribute__ ((aligned)) uint8_t csv_data_buf[128];
 int cvs_data_len = 0;
 PAGE_RAW *page_buf_read = NULL;
 PAGE_RAW *page_buf_write = NULL;
-uint32_t w25q16_write_page_index = 0;
-W25Q16_T w25q16_info;
+uint16_t write_page_index = 0;
 uint16_t file_index = 0;
+W25Q16_T w25q16_info;
+CHECKSUM_STORE checksum_store;
 XYZ_INT16T xyz_accel_u, xyz_gyro_u, xyz_accel_l, xyz_gyro_l;
 // #define SPEED_TEST 1
 #ifdef SPEED_TEST
@@ -157,6 +160,11 @@ int main(void)
   w25q16_init(&hspi2, &w25q16_info);
   if (w25q16_info.PageCount == 0) {
     Error_Handler();
+  } else {
+    checksum_store.checksum_index = 0;
+    checksum_store.checksum_page_count = w25q16_info.PageCount / 256;
+    checksum_store.checksum_page_start = w25q16_info.PageCount - checksum_store.checksum_page_count;
+    checksum_store.checksum_page_index = 0;
   }
   w25q16_erase_chip(&hspi2);
   w25q16_wait_write_done(&hspi2);
@@ -166,23 +174,23 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-#define FLASH_TEST
+//#define FLASH_TEST
 #ifdef FLASH_TEST
   for (int i = 0;  i< 256; i++) {
-    page_buf_write = (PAGE_RAW*)flash_write_buf[w25q16_write_page_index & 0x01];
+    page_buf_write = (PAGE_RAW*)flash_write_buf[write_page_index & 0x01];
     memset(page_buf_write, i, W25Q16_PAGE_SIZE);
     w25q16_wait_write_done(&hspi2);
-    w25q16_write(&hspi2, w25q16_write_page_index << 8, (uint8_t *)page_buf_write, W25Q16_PAGE_SIZE);
-    w25q16_write_page_index++;
+    w25q16_write(&hspi2, write_page_index << 8, (uint8_t *)page_buf_write, W25Q16_PAGE_SIZE);
+    write_page_index++;
   }
   w25q16_wait_write_done(&hspi2);
-  for (uint32_t w25q16_read_page_index = 0; w25q16_read_page_index < w25q16_write_page_index; w25q16_read_page_index++) {
-    w25q16_read(&hspi2, w25q16_read_page_index << 8, flash_read_buf, W25Q16_PAGE_SIZE);
-    if (flash_read_buf[W25Q16_PAGE_SIZE - 1] != w25q16_read_page_index) {
-      w25q16_read(&hspi2, w25q16_read_page_index << 8, flash_read_buf, W25Q16_PAGE_SIZE);
+  for (uint32_t read_page_index = 0; read_page_index < write_page_index; read_page_index++) {
+    w25q16_read(&hspi2, read_page_index << 8, flash_read_buf, W25Q16_PAGE_SIZE);
+    if (flash_read_buf[W25Q16_PAGE_SIZE - 1] != read_page_index) {
+      w25q16_read(&hspi2, read_page_index << 8, flash_read_buf, W25Q16_PAGE_SIZE);
     }
   }
-  w25q16_write_page_index = 0;
+  write_page_index = 0;
 #endif
 
   set_state(READY_IDLE);
@@ -195,7 +203,7 @@ int main(void)
     STATE state = check_state();
     switch (state) {
     case COLLECTING_DATA:
-      page_buf_write = (PAGE_RAW*)flash_write_buf[w25q16_write_page_index & 0x01];
+      page_buf_write = (PAGE_RAW*)flash_write_buf[write_page_index & 0x01];
       for (uint8_t record_index = 0; record_index < 8; record_index++) {
         wait_for_counter_changed();
 #ifdef SPEED_TEST
@@ -209,10 +217,37 @@ int main(void)
         srat_ADC(&hadc2, ADC_CHANNEL_4);  // PA4
         page_buf_write->data_raw_buffer[record_index].ad[2] = read_ADC(&hadc1);
         page_buf_write->data_raw_buffer[record_index].ad[3] = read_ADC(&hadc2);
-        i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6, page_buf_write->data_raw_buffer[record_index].accel_u);
-        i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6, page_buf_write->data_raw_buffer[record_index].gyro_u);
-        i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6, page_buf_write->data_raw_buffer[record_index].accel_l);
-        i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6, page_buf_write->data_raw_buffer[record_index].gyro_l);
+        i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6,
+            page_buf_write->data_raw_buffer[record_index].accel_u);
+        i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6,
+            page_buf_write->data_raw_buffer[record_index].gyro_u);
+        i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6,
+            page_buf_write->data_raw_buffer[record_index].accel_l);
+        i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6,
+            page_buf_write->data_raw_buffer[record_index].gyro_l);
+
+        if (write_page_index >= 1) {
+          uint8_t checksum;
+          uint32_t write_page_index_old = write_page_index - 1;
+          uint8_t *old_buffer = flash_write_buf[write_page_index_old & 0x01];
+          switch (record_index) {
+          case 1: // Calculate checksum of last page
+            checksum = calculate_checksum(old_buffer, W25Q16_PAGE_SIZE);
+            flash_checksum_buf[checksum_store.checksum_index++] = checksum;
+            break;
+          case 2: // Write checksum
+            if (checksum_store.checksum_index >= 256) {
+              w25q16_wait_write_done(&hspi2);
+              w25q16_write(&hspi2,
+                  (checksum_store.checksum_page_start + checksum_store.checksum_page_index++) << 8,
+                  flash_checksum_buf, W25Q16_PAGE_SIZE);
+              checksum_store.checksum_index = 0;
+            }
+            break;
+          default:
+            break;
+          }
+        }
       }
 #ifdef SPEED_TEST
       speed_test_timer6_counter[1] = read_TIM6_counter();
@@ -221,7 +256,7 @@ int main(void)
 #ifdef SPEED_TEST
       speed_test_timer6_counter[2] = read_TIM6_counter();
 #endif // SPEED_TEST
-      w25q16_write(&hspi2, w25q16_write_page_index << 8, (uint8_t *)page_buf_write, W25Q16_PAGE_SIZE);
+      w25q16_write(&hspi2, write_page_index << 8, (uint8_t *)page_buf_write, W25Q16_PAGE_SIZE);
 #ifdef SPEED_TEST
       speed_test_timer6_counter[3] = read_TIM6_counter();
 
@@ -236,12 +271,25 @@ int main(void)
         speed_test_total = 0;
       }
 #endif // SPEED_TEST
-      ++w25q16_write_page_index;
-      if (w25q16_write_page_index >= w25q16_info.PageCount) {
+      ++write_page_index;
+      if (write_page_index >= checksum_store.checksum_page_start) {
         set_state(SAVEING_TO_FILE);
       }
       break;
     case SAVEING_TO_FILE:
+      {
+        uint32_t write_page_index_old = write_page_index - 1;
+        uint8_t *old_buffer = flash_write_buf[write_page_index_old & 0x01];
+        uint8_t checksum = calculate_checksum(old_buffer, W25Q16_PAGE_SIZE);
+        flash_checksum_buf[checksum_store.checksum_index] = checksum;
+        w25q16_wait_write_done(&hspi2);
+        w25q16_write(&hspi2,
+            (checksum_store.checksum_page_start + checksum_store.checksum_page_index++) << 8,
+            flash_checksum_buf, W25Q16_PAGE_SIZE);
+        checksum_store.checksum_index = 0;
+        checksum_store.checksum_page_index = 0;
+      }
+
       file_index = get_file_index();
       if (file_index == 0) {
         set_state(NOT_READY);
@@ -255,8 +303,22 @@ int main(void)
         Error_Handler();
       } else {
         w25q16_wait_write_done(&hspi2);
-        for (uint32_t w25q16_read_page_index = 0; w25q16_read_page_index < w25q16_write_page_index; w25q16_read_page_index++) {
-          w25q16_read(&hspi2, w25q16_read_page_index << 8, flash_read_buf, W25Q16_PAGE_SIZE);
+        for (uint32_t read_page_index = 0; read_page_index < write_page_index; read_page_index++) {
+          // read checksume first
+          uint8_t stored_checksum = 0;
+          w25q16_read(&hspi2,
+              (checksum_store.checksum_page_start << 8) + checksum_store.checksum_index++, &stored_checksum, 1);
+
+          uint8_t read_again = 0;
+          w25q16_read(&hspi2, read_page_index << 8, flash_read_buf, W25Q16_PAGE_SIZE);
+          uint8_t read_checksum = calculate_checksum(flash_read_buf, W25Q16_PAGE_SIZE);
+          while ((read_checksum != stored_checksum) && (read_again < 8)) {
+            read_again++;
+            HAL_Delay(1);
+            w25q16_read(&hspi2, read_page_index << 8, flash_read_buf, W25Q16_PAGE_SIZE);
+            read_checksum = calculate_checksum(flash_read_buf, W25Q16_PAGE_SIZE);
+          }
+
           page_buf_read = (PAGE_RAW*)flash_read_buf;
           for (uint8_t record_index = 0; record_index < 8; record_index++) {
             mpu_get_accel(page_buf_read->data_raw_buffer[record_index].accel_u, &xyz_accel_u);
@@ -290,11 +352,12 @@ int main(void)
             write_data_record(csv_data_buf, cvs_data_len);
           }
         }
+        f_close(&SDFile);
         w25q16_erase_chip(&hspi2);
         w25q16_wait_write_done(&hspi2);
-        w25q16_write_page_index = 0;
+        write_page_index = 0;
+        checksum_store.checksum_index = 0;
         set_state(READY_IDLE);
-        f_close(&SDFile);
       }
       break;
     default:

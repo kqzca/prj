@@ -24,6 +24,14 @@ typedef struct _PAGE_RAW
   DATA_RAW data_raw_buffer[8];
 } PAGE_RAW;
 
+typedef struct _CHECKSUM_STORE
+{
+  uint16_t checksum_index;
+  uint16_t checksum_page_count;
+  uint16_t checksum_page_start;
+  uint16_t checksum_page_index;
+} CHECKSUM_STORE;
+
 typedef enum _STATE
 {
     NOT_READY = 0,
@@ -54,4 +62,5 @@ void LEDExt_off();
 void srat_ADC(ADC_HandleTypeDef *hadc, uint32_t channel);
 uint16_t read_ADC(ADC_HandleTypeDef *hadc);
 
+uint8_t calculate_checksum(uint8_t *buf, uint16_t size);
 #endif /* INC_COMMON_H_ */

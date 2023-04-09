@@ -91,7 +91,7 @@ void w25q16_read(SPI_HandleTypeDef *hspi, uint32_t addr, uint8_t *buf, uint16_t 
   to_transmit[3] = (addr & 0x000000FF);
   w25q16_chip_select();
   HAL_SPI_Transmit(hspi, &to_transmit, 4, 1);
-  HAL_SPI_Receive(hspi, buf, len, 1);
+  HAL_SPI_Receive(hspi, buf, len, 2);
   w25q16_chip_deselect();
 }
 
@@ -105,6 +105,6 @@ void w25q16_write(SPI_HandleTypeDef *hspi, uint32_t addr, uint8_t *buf, uint16_t
   w25q16_write_enable(hspi);
   w25q16_chip_select();
   HAL_SPI_Transmit(hspi, &to_transmit, 4, 1);
-  HAL_SPI_Transmit(hspi ,buf, len, 1);
+  HAL_SPI_Transmit(hspi ,buf, len, 2);
   w25q16_chip_deselect();
 }
