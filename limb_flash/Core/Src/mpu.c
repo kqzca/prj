@@ -8,28 +8,6 @@
 #include "stm32f1xx_hal.h"
 #include "mpu.h"
 
-/*
-HAL_StatusTypeDef i2c_write_reg(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t reg, uint8_t data) {
-	uint8_t tx_buf[2] = {reg, data};
-	return HAL_I2C_Master_Transmit(hi2c, i2c_addr, tx_buf, 2, 1);
-}
-
-HAL_StatusTypeDef i2c_read_regs(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t reg, uint8_t len, uint8_t *buf) {
-
-	reg |= 0x80; // Add read bit
-	if (len > 1) {
-
-		reg |= 0x40; // Add autoincrement bit
-	}
-	HAL_StatusTypeDef res = HAL_I2C_Master_Transmit(hi2c, i2c_addr, &reg, 1, 1);
-	if (res != HAL_OK) {
-		return res;
-	}
-	return HAL_I2C_Master_Receive(hi2c, i2c_addr, buf, len, 1);
-}
-*/
-
-static uint8_t i2c_read_buffer[6];
 static const MPU_CONFIG mpu_config = {
   MPU6XXX_ACCEL_RANGE_2G,
   MPU6XXX_GYRO_RANGE_250DPS,
@@ -46,39 +24,10 @@ inline HAL_StatusTypeDef i2c_read_regs(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr
 	return HAL_I2C_Mem_Read(hi2c, i2c_addr, reg, I2C_MEMADD_SIZE_8BIT, buffer, len, 1);
 }
 
-inline HAL_StatusTypeDef mpu_get_accel_buf(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, XYZ_INT16T *xyz) {
-  return i2c_read_regs(hi2c, i2c_addr, MPU6XXX_RA_ACCEL_XOUT_H, 6, i2c_read_buffer);
-}
-
-void mpu_get_accel(uint8_t *buf_6_bytes, XYZ_INT16T *xyz) {
+void mpu_raw_to_xyz(uint8_t *buf_6_bytes, XYZ_INT16T *xyz) {
   xyz->x = ((uint16_t)buf_6_bytes[0] << 8) + buf_6_bytes[1];
   xyz->y = ((uint16_t)buf_6_bytes[2] << 8) + buf_6_bytes[3];
   xyz->z = ((uint16_t)buf_6_bytes[4] << 8) + buf_6_bytes[5];
-}
-
-HAL_StatusTypeDef mpu_get_gyro_buf(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, XYZ_INT16T *xyz) {
-	return i2c_read_regs(hi2c, i2c_addr, MPU6XXX_RA_GYRO_XOUT_H, 6, i2c_read_buffer);
-}
-
-void mpu_get_gyro(uint8_t *buf_6_bytes, XYZ_INT16T *xyz) {
-  xyz->x = ((uint16_t)buf_6_bytes[0] << 8) + buf_6_bytes[1];
-  xyz->y = ((uint16_t)buf_6_bytes[2] << 8) + buf_6_bytes[3];
-  xyz->z = ((uint16_t)buf_6_bytes[4] << 8) + buf_6_bytes[5];
-}
-
-// If needed, MPU6XXX_RA_XA_OFFS_H for getting accel offset and MPU6XXX_RA_XG_OFFS_USRH for gyro offset
-
-static HAL_StatusTypeDef i2c_read_bit(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t reg, uint8_t bit, uint8_t *data)
-{
-    uint8_t byte;
-    HAL_StatusTypeDef res = i2c_read_regs(hi2c, i2c_addr, reg, 1, &byte);
-    if (res != HAL_OK) {
-        return res;
-    }
-
-    *data = byte & (1 << bit);
-
-    return HAL_OK;
 }
 
 static HAL_StatusTypeDef i2c_write_bits(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t reg, uint8_t start_bit, uint8_t len, uint8_t data)

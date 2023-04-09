@@ -322,10 +322,10 @@ int main(void)
 
           page_buf_read = (PAGE_RAW*)flash_read_buf;
           for (uint8_t record_index = 0; record_index < 8; record_index++) {
-            mpu_get_accel(page_buf_read->data_raw_buffer[record_index].accel_u, &xyz_accel_u);
-            mpu_get_gyro(page_buf_read->data_raw_buffer[record_index].gyro_u, &xyz_gyro_u);
-            mpu_get_accel(page_buf_read->data_raw_buffer[record_index].accel_l, &xyz_accel_l);
-            mpu_get_gyro(page_buf_read->data_raw_buffer[record_index].gyro_l, &xyz_gyro_l);
+            mpu_raw_to_xyz(page_buf_read->data_raw_buffer[record_index].accel_u, &xyz_accel_u);
+            mpu_raw_to_xyz(page_buf_read->data_raw_buffer[record_index].gyro_u, &xyz_gyro_u);
+            mpu_raw_to_xyz(page_buf_read->data_raw_buffer[record_index].accel_l, &xyz_accel_l);
+            mpu_raw_to_xyz(page_buf_read->data_raw_buffer[record_index].gyro_l, &xyz_gyro_l);
 
             cvs_data_len = snprintf(csv_data_buf, CVS_DATA_SIZE_MAX,
             /*

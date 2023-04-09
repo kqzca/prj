@@ -12,16 +12,18 @@
 #include <stdint.h>
 #include <stdio.h>
 
-STATE running_state = NOT_READY;
+static STATE running_state = NOT_READY;
+static uint8_t ext_key_start_old = 0;
 STATE check_state() {
+  uint8_t ext_key_start_new = ext_key_start();
   switch(running_state) {
   case READY_IDLE:
-    if (ext_key_start() == 1) {
+    if ((ext_key_start_old == 0) && (ext_key_start_new == 1)) {
       set_state(COLLECTING_DATA);
     }
     break;
   case COLLECTING_DATA:
-    if (ext_key_start() == 0) {
+    if (ext_key_start_new == 0) {
       set_state(SAVEING_TO_FILE);
     }
     break;
@@ -30,10 +32,12 @@ STATE check_state() {
   default:
     break;
   }
+  ext_key_start_old = ext_key_start_new;
   return running_state;
 }
 void set_state(STATE _state) {
   running_state = _state;
+  ext_key_start_old = ext_key_start();
 }
 
 uint32_t counterValue = 0, oldCounterValue = 0;

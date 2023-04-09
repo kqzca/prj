@@ -83,9 +83,6 @@ typedef struct _MPU_CONFIG
 HAL_StatusTypeDef i2c_write_reg(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t reg, uint8_t data);
 HAL_StatusTypeDef i2c_read_regs(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t reg, uint8_t len, uint8_t *buffer);
 HAL_StatusTypeDef mpu_init(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, uint8_t *reg);
-HAL_StatusTypeDef mpu_get_accel_buf(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, XYZ_INT16T *xyz);
-HAL_StatusTypeDef mpu_get_gyro_buf(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr, XYZ_INT16T *xyz);
-void mpu_get_accel(uint8_t *buf_6_bytes, XYZ_INT16T *xyz);
-void mpu_get_gyro(uint8_t *buf_6_bytes, XYZ_INT16T *xyz);
+void mpu_raw_to_xyz(uint8_t *buf_6_bytes, XYZ_INT16T *xyz);
 
 #endif /* INC_MPU_H_ */
