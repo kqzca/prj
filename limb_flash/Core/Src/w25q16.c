@@ -2,7 +2,7 @@
  * w25q16.c
  *
  *  Created on: Mar. 26, 2023
- *      Author: zhang
+ *      Author: Qun Zhang
  */
 
 #include "stm32f1xx_hal.h"

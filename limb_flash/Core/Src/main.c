@@ -71,7 +71,7 @@ __attribute__ ((aligned)) uint8_t csv_data_buf[CVS_DATA_SIZE_MAX];
 int32_t cvs_data_len = 0;
 PAGE_RAW *page_buf_read = NULL;
 PAGE_RAW *page_buf_write = NULL;
-uint16_t write_page_index = 0;
+uint32_t write_page_index = 0;
 uint16_t file_index = 0;
 W25Q16_T w25q16_info;
 XYZ_INT16T xyz_accel_u, xyz_gyro_u, xyz_accel_l, xyz_gyro_l;
@@ -257,7 +257,7 @@ int main(void)
         set_state(NOT_READY);
         Error_Handler();
       } else {
-        cvs_data_len = snprintf(csv_data_buf, CVS_DATA_SIZE_MAX, "file,%d,,page,%ld,max,%d,,records,%ld\r\n",
+        cvs_data_len = snprintf(csv_data_buf, CVS_DATA_SIZE_MAX, "file,%d,,page,%ld,max,%ld,,records,%ld\r\n",
             file_index, write_page_index, w25q16_info.PageCount, write_page_index * 8);
         write_data_record(csv_data_buf, cvs_data_len);
         w25q16_wait_write_done(&hspi2);

@@ -2,7 +2,7 @@
  * files.c
  *
  *  Created on: Apr. 2, 2023
- *      Author: zhang
+ *      Author: Qun Zhang
  */
 
 #include "bsp_driver_sd.h"
