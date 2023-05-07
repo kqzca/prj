@@ -12,16 +12,17 @@
 
 typedef struct _DATA_RAW
 {
-  uint16_t ad[4];
+  uint16_t ad[6];
   uint8_t accel_u[6];
   uint8_t gyro_u[6];
   uint8_t accel_l[6];
   uint8_t gyro_l[6];
 } DATA_RAW;
 
+#define RECORD_PER_PAGE 7
 typedef struct _PAGE_RAW
 {
-  DATA_RAW data_raw_buffer[8];
+  DATA_RAW data_raw_buffer[RECORD_PER_PAGE];
 } PAGE_RAW;
 
 typedef enum _STATE

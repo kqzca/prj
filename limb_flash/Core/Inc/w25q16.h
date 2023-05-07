@@ -10,7 +10,8 @@
 
 #include "stm32f1xx_hal.h"
 
-#define  W25Q16_PAGE_SIZE 256
+#define W25Q16_PAGE_SIZE 256
+#define PAGE_ADDRESS_SHIFT 8
 typedef struct _W25Q16_T
 {
   uint8_t UniqID[8];

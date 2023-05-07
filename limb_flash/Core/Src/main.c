@@ -172,14 +172,14 @@ int main(void)
     page_buf_write = (PAGE_RAW*)flash_write_buf[write_page_index & 0x01];
     memset(page_buf_write, i, W25Q16_PAGE_SIZE);
     w25q16_wait_write_done(&hspi2);
-    w25q16_write(&hspi2, write_page_index << 8, (uint8_t *)page_buf_write, W25Q16_PAGE_SIZE);
+    w25q16_write(&hspi2, write_page_index << PAGE_ADDRESS_SHIFT, (uint8_t *)page_buf_write, W25Q16_PAGE_SIZE);
     write_page_index++;
   }
   w25q16_wait_write_done(&hspi2);
   for (uint32_t read_page_index = 0; read_page_index < write_page_index; read_page_index++) {
-    w25q16_read(&hspi2, read_page_index << 8, flash_read_buf, W25Q16_PAGE_SIZE);
+    w25q16_read(&hspi2, read_page_index << PAGE_ADDRESS_SHIFT, flash_read_buf, W25Q16_PAGE_SIZE);
     if (flash_read_buf[W25Q16_PAGE_SIZE - 1] != read_page_index) {
-      w25q16_read(&hspi2, read_page_index << 8, flash_read_buf, W25Q16_PAGE_SIZE);
+      w25q16_read(&hspi2, read_page_index << PAGE_ADDRESS_SHIFT, flash_read_buf, W25Q16_PAGE_SIZE);
     }
   }
   write_page_index = 0;
@@ -195,7 +195,7 @@ int main(void)
     switch (state) {
     case COLLECTING_DATA:
       page_buf_write = (PAGE_RAW*)flash_write_buf[write_page_index & 0x01];
-      for (uint8_t record_index = 0; record_index < 8; record_index++) {
+      for (uint8_t record_index = 0; record_index < RECORD_PER_PAGE; record_index++) {
         wait_for_counter_changed();
 #ifdef SPEED_TEST
         speed_test_timer6_counter[0] = read_TIM6_counter();
@@ -208,6 +208,9 @@ int main(void)
         srat_ADC(&hadc2, ADC_CHANNEL_4);  // PA4
         page_buf_write->data_raw_buffer[record_index].ad[2] = read_ADC(&hadc1);
         page_buf_write->data_raw_buffer[record_index].ad[3] = read_ADC(&hadc2);
+        srat_ADC(&hadc1, ADC_CHANNEL_7);  // PA7
+        page_buf_write->data_raw_buffer[record_index].ad[4] = read_ADC(&hadc1);
+        page_buf_write->data_raw_buffer[record_index].ad[5] = 0;
         i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6,
             page_buf_write->data_raw_buffer[record_index].accel_u);
         i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6,
@@ -224,7 +227,7 @@ int main(void)
 #ifdef SPEED_TEST
       speed_test_timer6_counter[2] = read_TIM6_counter();
 #endif // SPEED_TEST
-      w25q16_write(&hspi2, write_page_index << 8, (uint8_t *)page_buf_write, W25Q16_PAGE_SIZE);
+      w25q16_write(&hspi2, write_page_index << PAGE_ADDRESS_SHIFT, (uint8_t *)page_buf_write, W25Q16_PAGE_SIZE);
 #ifdef SPEED_TEST
       speed_test_timer6_counter[3] = read_TIM6_counter();
 
@@ -258,13 +261,13 @@ int main(void)
         Error_Handler();
       } else {
         cvs_data_len = snprintf(csv_data_buf, CVS_DATA_SIZE_MAX, "file,%d,,page,%ld,max,%ld,,records,%ld\r\n",
-            file_index, write_page_index, w25q16_info.PageCount, write_page_index * 8);
+            file_index, write_page_index, w25q16_info.PageCount, write_page_index * RECORD_PER_PAGE);
         write_data_record(csv_data_buf, cvs_data_len);
         w25q16_wait_write_done(&hspi2);
         for (uint32_t read_page_index = 0; read_page_index < write_page_index; read_page_index++) {
-          w25q16_read(&hspi2, read_page_index << 8, flash_read_buf, W25Q16_PAGE_SIZE);
+          w25q16_read(&hspi2, read_page_index << PAGE_ADDRESS_SHIFT, flash_read_buf, W25Q16_PAGE_SIZE);
           page_buf_read = (PAGE_RAW*)flash_read_buf;
-          for (uint8_t record_index = 0; record_index < 8; record_index++) {
+          for (uint8_t record_index = 0; record_index < RECORD_PER_PAGE; record_index++) {
             mpu_raw_to_xyz(page_buf_read->data_raw_buffer[record_index].accel_u, &xyz_accel_u);
             mpu_raw_to_xyz(page_buf_read->data_raw_buffer[record_index].gyro_u, &xyz_gyro_u);
             mpu_raw_to_xyz(page_buf_read->data_raw_buffer[record_index].accel_l, &xyz_accel_l);
@@ -272,25 +275,27 @@ int main(void)
 
             cvs_data_len = snprintf(csv_data_buf, CVS_DATA_SIZE_MAX,
             /*
-             * gyro lower z -----------------------------------
-             * gyro lower y --------------------------------   |
-             * gyro lower x -----------------------------   |  |
-             * accel lower z -------------------------   |  |  |
-             * accel lower y ----------------------   |  |  |  |
-             * accel lower x -------------------   |  |  |  |  |
-             * gyro upper z -----------------   |  |  |  |  |  |
-             * gyro upper y --------------   |  |  |  |  |  |  |
-             * gyro upper x -----------   |  |  |  |  |  |  |  |
-             * accel upper z -------   |  |  |  |  |  |  |  |  |
-             * accel upper y-----   |  |  |  |  |  |  |  |  |  |
-             * accel upper x--   |  |  |  |  |  |  |  |  |  |  |
-             *   a1 a2 a3 a4  |  |  |  |  |  |  |  |  |  |  |  |
-             *    |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |       */
-                "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\r\n",
+             * gyro lower z -----------------------------------------
+             * gyro lower y --------------------------------------   |
+             * gyro lower x -----------------------------------   |  |
+             * accel lower z -------------------------------   |  |  |
+             * accel lower y ----------------------------   |  |  |  |
+             * accel lower x -------------------------   |  |  |  |  |
+             * gyro upper z -----------------------   |  |  |  |  |  |
+             * gyro upper y --------------------   |  |  |  |  |  |  |
+             * gyro upper x -----------------   |  |  |  |  |  |  |  |
+             * accel upper z -------------   |  |  |  |  |  |  |  |  |
+             * accel upper y ----------   |  |  |  |  |  |  |  |  |  |
+             * accel upper x -------   |  |  |  |  |  |  |  |  |  |  |
+             *   a1 a2 a3 a4 a5 a6  |  |  |  |  |  |  |  |  |  |  |  |
+             *    |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |       */
+                "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\r\n",
                 page_buf_read->data_raw_buffer[record_index].ad[0],
                 page_buf_read->data_raw_buffer[record_index].ad[1],
                 page_buf_read->data_raw_buffer[record_index].ad[2],
                 page_buf_read->data_raw_buffer[record_index].ad[3],
+                page_buf_read->data_raw_buffer[record_index].ad[4],
+                page_buf_read->data_raw_buffer[record_index].ad[5],
                 xyz_accel_u.x, xyz_accel_u.y, xyz_accel_u.z, xyz_gyro_u.x, xyz_gyro_u.y, xyz_gyro_u.z,
                 xyz_accel_l.x, xyz_accel_l.y, xyz_accel_l.z, xyz_gyro_l.x, xyz_gyro_l.y, xyz_gyro_l.z);
             write_data_record(csv_data_buf, cvs_data_len);
