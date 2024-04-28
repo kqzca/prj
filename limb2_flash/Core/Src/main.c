@@ -62,6 +62,7 @@ SPI_HandleTypeDef hspi2;
 TIM_HandleTypeDef htim7;
 
 /* USER CODE BEGIN PV */
+uint8_t board_version = 0;
 __attribute__ ((aligned)) uint8_t flash_read_buf[W25Q128_PAGE_SIZE];
 __attribute__ ((aligned)) uint8_t flash_write_buf[2][W25Q128_PAGE_SIZE];
 __attribute__ ((aligned)) uint8_t csv_data_buf[CVS_DATA_SIZE_MAX];
@@ -155,6 +156,14 @@ int main(void)
   set_state(READY_IDLE);
   while (1)
   {
+    if (is_io_expander_input_change() != 0) {
+      uint8_t buffer;
+      HAL_StatusTypeDef res = i2c_read_regs(&hi2c2, I2C_DI_EXPANDER_ADDR_SHIFTED, TCA9543_INPUT_REG_ADDR, 1, &buffer);
+      if (res == HAL_OK) {
+        board_version = buffer & 0x07;
+        set_sd_present(buffer & 0x08);
+      }
+    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -185,8 +194,6 @@ int main(void)
       if (write_page_index >= w25q128_info.PageCount) {
         set_state(SAVEING_TO_FILE);
       }
-      uint8_t buffer;
-      i2c_read_regs(&hi2c2, I2C_DI_EXPANDER_ADDR_SHIFTED, TCA9543_INPUT_REG_ADDR, 1, buffer);
       break;
     case SAVEING_TO_FILE:
 // #define NO_SD 1
@@ -676,6 +683,12 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6|GPIO_PIN_7, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin : PC13 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
   /*Configure GPIO pin : PC3 */
   GPIO_InitStruct.Pin = GPIO_PIN_3;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
@@ -688,6 +701,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PC4 PC5 */
+  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PB2 PB12 */
   GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_12;
@@ -714,6 +733,16 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI4_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
 }
 

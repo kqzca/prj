@@ -13,10 +13,18 @@
 
 const TCHAR *INDEX_FILE_NAME = "index.txt";
 
+uint8_t sd_present = SD_NOT_PRESENT;
+inline void set_sd_present(uint8_t is_sd_present) {
+  if (is_sd_present == 0) {
+    sd_present = SD_NOT_PRESENT;
+  } else {
+    sd_present = SD_PRESENT;
+  }
+}
 uint8_t BSP_SD_IsDetected(void)
 {
   // No SD detect pin on board
-  return SD_PRESENT;
+  return sd_present;
 }
 
 uint16_t get_file_index() {

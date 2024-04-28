@@ -10,7 +10,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "common.h"
-#include "i2c.h"
 
 static STATE running_state = NOT_READY;
 static uint8_t ext_key_start_old = 0;
@@ -106,4 +105,14 @@ void start_ADC(ADC_HandleTypeDef *hadc, uint32_t channel) {
 inline uint16_t read_ADC(ADC_HandleTypeDef *hadc) {
   HAL_ADC_PollForConversion(hadc, 1);
   return HAL_ADC_GetValue(hadc);
+}
+
+uint8_t io_expander_input_changed = 0;
+inline uint8_t is_io_expander_input_change() {
+  uint8_t res = io_expander_input_changed;
+  io_expander_input_changed = 0;
+  return res;
+}
+inline void notify_io_expander_input_change() {
+  io_expander_input_changed = 1;
 }

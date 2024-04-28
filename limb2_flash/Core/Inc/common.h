@@ -53,5 +53,7 @@ uint16_t read_ADC(ADC_HandleTypeDef *hadc);
 #define TCA9543_ADDRESS_AD012_LOW     0x20
 #define TCA9543_INPUT_REG_ADDR        0x00
 #define I2C_DI_EXPANDER_ADDR_SHIFTED  (TCA9543_ADDRESS_AD012_LOW << 1)
+uint8_t is_io_expander_input_change();
+void notify_io_expander_input_change();
 
 #endif /* INC_COMMON_H_ */
