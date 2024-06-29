@@ -39,8 +39,8 @@ uint32_t get_counter();
 void increase_counter();
 uint32_t wait_for_counter_changed();
 void increase_250ms_counter();
-uint16_t read_TIM6_counter();
-uint16_t reset_TIM6_counter();
+uint16_t read_TIM7_counter();
+uint16_t reset_TIM7_counter();
 
 GPIO_PinState read_ext_sw();
 uint8_t ext_key_start();
