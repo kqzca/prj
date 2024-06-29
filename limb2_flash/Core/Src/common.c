@@ -84,12 +84,12 @@ void increase_250ms_counter() {
   }
 }
 
-inline uint16_t read_TIM6_counter() {
-  return TIM6->CNT;
+inline uint16_t read_TIM7_counter() {
+  return TIM7->CNT;
 }
 
-inline uint16_t reset_TIM6_counter() {
-  return TIM6->CNT = 0;
+inline uint16_t reset_TIM7_counter() {
+  return TIM7->CNT = 0;
 }
 
 void start_ADC(ADC_HandleTypeDef *hadc, uint32_t channel) {
