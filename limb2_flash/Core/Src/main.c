@@ -138,6 +138,7 @@ int main(void)
   MX_FATFS_Init();
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
+  HAL_TIM_Base_Start_IT(&htim4);
   HAL_TIM_Base_Start_IT(&htim7);
   w25q128_chip_deselect();
   uint8_t reg_u = 0xFF, reg_l = 0xFF;;
