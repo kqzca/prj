@@ -144,15 +144,22 @@ int main(void)
   uint8_t reg_u = 0xFF, reg_l = 0xFF;;
   mpu_init(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &reg_u);
   mpu_init(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &reg_l);
-  if(f_mount(&SDFatFS, (TCHAR const*)SDPath, 0) != FR_OK) {
-    Error_Handler();
-  }
   w25q128_init(&hspi2, &w25q128_info);
   if (w25q128_info.PageCount == 0) {
     Error_Handler();
   }
   w25q128_erase_chip(&hspi2);
   w25q128_wait_write_done(&hspi2);
+
+  uint8_t bufReadDiExp;
+  HAL_StatusTypeDef resReadDiExp = i2c_read_regs(&hi2c2, I2C_DI_EXPANDER_ADDR_SHIFTED, TCA9543_INPUT_REG_ADDR, 1, &bufReadDiExp);
+  if (resReadDiExp == HAL_OK) {
+    board_version = (bufReadDiExp & 0xE0) >> 5;
+    set_sd_present(bufReadDiExp & 0x08);
+  }
+  if(f_mount(&SDFatFS, (TCHAR const*)SDPath, 0) != FR_OK) {
+    Error_Handler();
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -161,11 +168,9 @@ int main(void)
   while (1)
   {
     if (is_io_expander_input_change() != 0) {
-      uint8_t buffer;
-      HAL_StatusTypeDef res = i2c_read_regs(&hi2c2, I2C_DI_EXPANDER_ADDR_SHIFTED, TCA9543_INPUT_REG_ADDR, 1, &buffer);
-      if (res == HAL_OK) {
-        board_version = buffer & 0x07;
-        set_sd_present(buffer & 0x08);
+      resReadDiExp = i2c_read_regs(&hi2c2, I2C_DI_EXPANDER_ADDR_SHIFTED, TCA9543_INPUT_REG_ADDR, 1, &bufReadDiExp);
+      if (resReadDiExp == HAL_OK) {
+        set_sd_present(resReadDiExp & 0x08);
       }
     }
     /* USER CODE END WHILE */
@@ -200,7 +205,7 @@ int main(void)
       }
       break;
     case SAVEING_TO_FILE:
-#define NO_SD 1
+// #define NO_SD 1
 #ifdef NO_SD
       // do 5000ms delay
       HAL_Delay(5000);
@@ -524,7 +529,7 @@ static void MX_SDIO_SD_Init(void)
   hsd.Init.ClockBypass = SDIO_CLOCK_BYPASS_DISABLE;
   hsd.Init.ClockPowerSave = SDIO_CLOCK_POWER_SAVE_DISABLE;
   hsd.Init.BusWide = SDIO_BUS_WIDE_1B;
-  hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
+  hsd.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_ENABLE;
   hsd.Init.ClockDiv = 2;
   /* USER CODE BEGIN SDIO_Init 2 */
 

@@ -50,10 +50,10 @@ void increase_counter() {
 
 uint32_t wait_for_counter_changed() {
   while(oldCounterValue == counterValue) {
-    write_LEDRED(GPIO_PIN_RESET);
+    write_LEDRED(GPIO_PIN_SET);
   }
   oldCounterValue = counterValue;
-  write_LEDRED(GPIO_PIN_SET);
+  write_LEDRED(GPIO_PIN_RESET);
   return counterValue;
 }
 
