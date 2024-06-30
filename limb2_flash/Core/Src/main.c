@@ -24,7 +24,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "common.h"
-#include "mpu.h"
+#include "icm42670.h"
 #include "files.h"
 #include "w25q128.h"
 #include <stdio.h>
@@ -141,15 +141,16 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim4);
   HAL_TIM_Base_Start_IT(&htim7);
   w25q128_chip_deselect();
-  uint8_t reg_u = 0xFF, reg_l = 0xFF;;
-  mpu_init(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, &reg_u);
-  mpu_init(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, &reg_l);
+
+  icm42670Init(&hi2c2, ICM42670U_DEFAULT_ADDRESS_SHIFTED);
+  icm42670Init(&hi2c2, ICM42670L_DEFAULT_ADDRESS_SHIFTED);
+
   w25q128_init(&hspi2, &w25q128_info);
   if (w25q128_info.PageCount == 0) {
     Error_Handler();
   }
-  w25q128_erase_chip(&hspi2);
-  w25q128_wait_write_done(&hspi2);
+  // w25q128_erase_chip(&hspi2);
+  // w25q128_wait_write_done(&hspi2);
 
   uint8_t bufReadDiExp;
   HAL_StatusTypeDef resReadDiExp = i2c_read_regs(&hi2c2, I2C_DI_EXPANDER_ADDR_SHIFTED, TCA9543_INPUT_REG_ADDR, 1, &bufReadDiExp);
@@ -188,13 +189,13 @@ int main(void)
         page_buf_write->data_raw_buffer[record_index].ad[0] = read_ADC(&hadc1);
         page_buf_write->data_raw_buffer[record_index].ad[1] = read_ADC(&hadc2);
         page_buf_write->data_raw_buffer[record_index].ad[2] = read_ADC(&hadc3);
-        i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6,
+        i2c_read_regs(&hi2c2, ICM42670U_DEFAULT_ADDRESS_SHIFTED, ICM42670_REG_ACCEL_DATA_X1, 6,
             page_buf_write->data_raw_buffer[record_index].accel_u);
-        i2c_read_regs(&hi2c2, IMU_U_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6,
+        i2c_read_regs(&hi2c2, ICM42670U_DEFAULT_ADDRESS_SHIFTED, ICM42670_REG_GYRO_DATA_X1, 6,
             page_buf_write->data_raw_buffer[record_index].gyro_u);
-        i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_ACCEL_XOUT_H, 6,
+        i2c_read_regs(&hi2c2, ICM42670L_DEFAULT_ADDRESS_SHIFTED, ICM42670_REG_ACCEL_DATA_X1, 6,
             page_buf_write->data_raw_buffer[record_index].accel_l);
-        i2c_read_regs(&hi2c2, IMU_L_I2C_ADDR_SHIFTED, MPU6XXX_RA_GYRO_XOUT_H, 6,
+        i2c_read_regs(&hi2c2, ICM42670L_DEFAULT_ADDRESS_SHIFTED, ICM42670_REG_GYRO_DATA_X1, 6,
             page_buf_write->data_raw_buffer[record_index].gyro_l);
       }
       w25q128_wait_write_done(&hspi2);
