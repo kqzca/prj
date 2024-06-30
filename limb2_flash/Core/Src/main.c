@@ -149,8 +149,8 @@ int main(void)
   if (w25q128_info.PageCount == 0) {
     Error_Handler();
   }
-  // w25q128_erase_chip(&hspi2);
-  // w25q128_wait_write_done(&hspi2);
+  w25q128_erase_chip(&hspi2);
+  w25q128_wait_write_done(&hspi2);
 
   uint8_t bufReadDiExp;
   HAL_StatusTypeDef resReadDiExp = i2c_read_regs(&hi2c2, I2C_DI_EXPANDER_ADDR_SHIFTED, TCA9543_INPUT_REG_ADDR, 1, &bufReadDiExp);
