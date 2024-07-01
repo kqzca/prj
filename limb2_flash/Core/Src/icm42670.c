@@ -13,9 +13,9 @@ HAL_StatusTypeDef icm42670Init(I2C_HandleTypeDef *hi2c, uint8_t i2c_addr) {
   if (res != HAL_OK) return res;
   res = icm42670SensorConf(hi2c, i2c_addr);
   if (res != HAL_OK) return res;
-  res = icm42670StartAccel(hi2c, i2c_addr, ICM42670_CONFIG_ACCEL_2_G, ICM42670_CONFIG_RATE_100_Hz);
+  res = icm42670StartAccel(hi2c, i2c_addr, ICM42670_CONFIG_ACCEL_2_G, ICM42670_CONFIG_RATE_1p6_kHz);
   if (res != HAL_OK) return res;
-  res = icm42670StartGyro(hi2c, i2c_addr, ICM42670_CONFIG_GYRO_250_DPS, ICM42670_CONFIG_RATE_100_Hz);
+  res = icm42670StartGyro(hi2c, i2c_addr, ICM42670_CONFIG_GYRO_250_DPS, ICM42670_CONFIG_RATE_1p6_kHz);
   return res;
 }
 

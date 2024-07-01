@@ -142,6 +142,19 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim7);
   w25q128_chip_deselect();
 
+  uint8_t bufReadDiExp;
+  HAL_StatusTypeDef resReadDiExp = i2c_read_regs(&hi2c2, I2C_DI_EXPANDER_ADDR_SHIFTED, TCA9543_INPUT_REG_ADDR, 1, &bufReadDiExp);
+  if (resReadDiExp == HAL_OK) {
+    board_version = (bufReadDiExp & 0xE0) >> 5;
+    set_sd_present(bufReadDiExp & 0x08);
+    if (BSP_SD_IsDetected() == SD_NOT_PRESENT) {
+      Error_Handler();
+    }
+  }
+  if(f_mount(&SDFatFS, (TCHAR const*)SDPath, 0) != FR_OK) {
+    Error_Handler();
+  }
+
   icm42670Init(&hi2c2, ICM42670U_DEFAULT_ADDRESS_SHIFTED);
   icm42670Init(&hi2c2, ICM42670L_DEFAULT_ADDRESS_SHIFTED);
 
@@ -151,16 +164,6 @@ int main(void)
   }
   w25q128_erase_chip(&hspi2);
   w25q128_wait_write_done(&hspi2);
-
-  uint8_t bufReadDiExp;
-  HAL_StatusTypeDef resReadDiExp = i2c_read_regs(&hi2c2, I2C_DI_EXPANDER_ADDR_SHIFTED, TCA9543_INPUT_REG_ADDR, 1, &bufReadDiExp);
-  if (resReadDiExp == HAL_OK) {
-    board_version = (bufReadDiExp & 0xE0) >> 5;
-    set_sd_present(bufReadDiExp & 0x08);
-  }
-  if(f_mount(&SDFatFS, (TCHAR const*)SDPath, 0) != FR_OK) {
-    Error_Handler();
-  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -168,12 +171,6 @@ int main(void)
   set_state(READY_IDLE);
   while (1)
   {
-    if (is_io_expander_input_change() != 0) {
-      resReadDiExp = i2c_read_regs(&hi2c2, I2C_DI_EXPANDER_ADDR_SHIFTED, TCA9543_INPUT_REG_ADDR, 1, &bufReadDiExp);
-      if (resReadDiExp == HAL_OK) {
-        set_sd_present(resReadDiExp & 0x08);
-      }
-    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -814,6 +811,7 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
+  write_LEDRED(GPIO_PIN_SET);
   while (1)
   {
   }

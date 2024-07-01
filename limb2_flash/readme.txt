@@ -55,7 +55,7 @@ Notes:
 2. SD card larger than 4G was not tested.
 3. On-board flash device W25Q128 is 128M-bits/16M-bytes in size, may hold data for about 16 minutes.
 4. When write to file, 128M data on W25Q128 will generate a file about 36M, a 4G SD card can hold ~100 data files.
-5. ICM42670 Accel range 2G, Gyro range 250DPS, Freq 100Hz
+5. ICM42670 Accel range 2G, Gyro range 250DPS, Freq 1600Hz
 6. Attached code can be edited/compiled/downloaded using STM32CubeIDE free version:
    https://www.st.com/en/development-tools/stm32cubeide.html
 7. This is the debug interface hardware I use: https://www.st.com/en/development-tools/st-link-v2.html
