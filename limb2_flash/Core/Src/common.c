@@ -28,6 +28,7 @@ STATE check_state() {
     break;
   case SAVEING_TO_FILE:
   case NOT_READY:
+  case MOTOR_TEST:
   default:
     break;
   }
@@ -69,18 +70,28 @@ void increase_250ms_counter() {
   ++counter_250ms;
   switch(running_state) {
   case READY_IDLE:
+    write_LEDRED(GPIO_PIN_RESET);
     write_LEDGRN(GPIO_PIN_SET);
     break;
   case COLLECTING_DATA:
+    write_LEDRED(GPIO_PIN_RESET);
     write_LEDGRN(((counter_250ms & 0x02) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
     break;
   case SAVEING_TO_FILE:
+    write_LEDRED(GPIO_PIN_RESET);
     write_LEDGRN(((counter_250ms & 0x04) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
     break;
+  case MOTOR_TEST:
+    write_LEDRED(((counter_250ms & 0x04) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
+    write_LEDGRN(GPIO_PIN_RESET);
+    break;
   case NOT_READY:
-  default:
+    write_LEDRED(GPIO_PIN_RESET);
     write_LEDGRN(((counter_250ms & 0x01) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
     break;
+  default:
+    write_LEDRED(GPIO_PIN_SET);
+    write_LEDGRN(GPIO_PIN_RESET);
   }
 }
 
@@ -107,6 +118,9 @@ inline uint16_t read_ADC(ADC_HandleTypeDef *hadc) {
   return HAL_ADC_GetValue(hadc);
 }
 
+inline HAL_StatusTypeDef tca9534Read(I2C_HandleTypeDef *hi2c, uint8_t *buf) {
+  return i2c_read_regs(hi2c, I2C_DI_EXPANDER_ADDR_SHIFTED, TCA9534_INPUT_REG_ADDR, 1, buf);
+}
 uint8_t io_expander_input_changed = 0;
 inline uint8_t is_io_expander_input_change() {
   uint8_t res = io_expander_input_changed;
@@ -115,4 +129,11 @@ inline uint8_t is_io_expander_input_change() {
 }
 inline void notify_io_expander_input_change() {
   io_expander_input_changed = 1;
+}
+
+inline HAL_StatusTypeDef tca9535Read(I2C_HandleTypeDef *hi2c, uint8_t *buf) {
+  return i2c_read_regs(hi2c, I2C_CTRL_BOARD_ADDR_SHIFTED, TCA9535_INPUT_REG0_ADDR, 2, buf);
+}
+inline uint8_t isCtrlBoardConnected() {
+  return HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_4) == GPIO_PIN_SET ? 1 : 0;
 }

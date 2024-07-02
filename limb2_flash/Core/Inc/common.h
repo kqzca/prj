@@ -31,6 +31,7 @@ typedef enum _STATE
     READY_IDLE,
     COLLECTING_DATA,
     SAVEING_TO_FILE,
+    MOTOR_TEST,
 } STATE;
 STATE check_state();
 void set_state(STATE _state);
@@ -50,10 +51,17 @@ void write_LEDRED(GPIO_PinState state);
 void start_ADC(ADC_HandleTypeDef *hadc, uint32_t channel);
 uint16_t read_ADC(ADC_HandleTypeDef *hadc);
 
-#define TCA9543_ADDRESS_AD012_LOW     0x20
-#define TCA9543_INPUT_REG_ADDR        0x00
-#define I2C_DI_EXPANDER_ADDR_SHIFTED  (TCA9543_ADDRESS_AD012_LOW << 1)
+#define TCA9534_ADDRESS_ADR000        0x20
+#define I2C_DI_EXPANDER_ADDR_SHIFTED  (TCA9534_ADDRESS_ADR000 << 1)
+#define TCA9534_INPUT_REG_ADDR 0x00
+HAL_StatusTypeDef tca9534Read(I2C_HandleTypeDef *hi2c, uint8_t *buf);
 uint8_t is_io_expander_input_change();
 void notify_io_expander_input_change();
+
+#define TCA9535_ADDRESS_ADR100        0x24
+#define I2C_CTRL_BOARD_ADDR_SHIFTED   (TCA9535_ADDRESS_ADR100 << 1)
+#define TCA9535_INPUT_REG0_ADDR 0x00
+#define TCA9535_INPUT_REG1_ADDR 0x01
+HAL_StatusTypeDef tca9535Read(I2C_HandleTypeDef *hi2c, uint8_t *buf);
 
 #endif /* INC_COMMON_H_ */

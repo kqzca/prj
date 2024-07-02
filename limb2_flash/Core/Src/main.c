@@ -143,13 +143,13 @@ int main(void)
   w25q128_chip_deselect();
 
   uint8_t bufReadDiExp;
-  HAL_StatusTypeDef resReadDiExp = i2c_read_regs(&hi2c2, I2C_DI_EXPANDER_ADDR_SHIFTED, TCA9543_INPUT_REG_ADDR, 1, &bufReadDiExp);
-  if (resReadDiExp == HAL_OK) {
-    board_version = (bufReadDiExp & 0xE0) >> 5;
-    set_sd_present(bufReadDiExp & 0x08);
-    if (BSP_SD_IsDetected() == SD_NOT_PRESENT) {
-      Error_Handler();
-    }
+  if (tca9534Read(&hi2c2, &bufReadDiExp) != HAL_OK) {
+    Error_Handler();
+  }
+  board_version = (bufReadDiExp & 0xE0) >> 5;
+  set_sd_present(bufReadDiExp & 0x08);
+  if (BSP_SD_IsDetected() == SD_NOT_PRESENT) {
+    Error_Handler();
   }
   if(f_mount(&SDFatFS, (TCHAR const*)SDPath, 0) != FR_OK) {
     Error_Handler();
@@ -162,13 +162,20 @@ int main(void)
   if (w25q128_info.PageCount == 0) {
     Error_Handler();
   }
-  w25q128_erase_chip(&hspi2);
-  w25q128_wait_write_done(&hspi2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+#define MOTOR_TEST_MODE 1
+#ifdef MOTOR_TEST_MODE
+  set_state(MOTOR_TEST);
+  uint8_t motor_ctrl_input[2] = {0, 0};
+#else
+  w25q128_erase_chip(&hspi2);
+  w25q128_wait_write_done(&hspi2);
   set_state(READY_IDLE);
+#endif
+
   while (1)
   {
     /* USER CODE END WHILE */
@@ -203,13 +210,6 @@ int main(void)
       }
       break;
     case SAVEING_TO_FILE:
-// #define NO_SD 1
-#ifdef NO_SD
-      // do 5000ms delay
-      HAL_Delay(5000);
-      write_page_index = 0;
-      set_state(READY_IDLE);
-#else
       file_index = get_file_index();
       if (file_index == 0) {
         set_state(NOT_READY);
@@ -269,7 +269,11 @@ int main(void)
         write_page_index = 0;
         set_state(READY_IDLE);
       }
-#endif // NO_SD
+      break;
+    case MOTOR_TEST:
+      if (tca9535Read(&hi2c2, motor_ctrl_input) == HAL_OK) {
+
+      }
       break;
     case NOT_READY:
     case READY_IDLE:
@@ -741,8 +745,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PC3 */
-  GPIO_InitStruct.Pin = GPIO_PIN_3;
+  /*Configure GPIO pins : PC3 PC4 PC5 */
+  GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
@@ -753,12 +757,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : PC4 PC5 */
-  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PB2 PB12 */
   GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_12;
@@ -787,12 +785,6 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(EXTI4_IRQn);
-
-  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
-
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
