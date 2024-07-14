@@ -12,17 +12,18 @@
 #include "common.h"
 
 static STATE running_state = NOT_READY;
-static uint8_t ext_key_start_old = 0;
+static uint8_t on_board_sw_st_old = 0;
+static uint8_t rotary_board_sw_st_old = 0;
 STATE check_state() {
-  uint8_t ext_key_start_new = ext_key_start();
+  uint8_t on_board_sw_st_new = input_sw_on(ON_BOARD_SW);
   switch(running_state) {
   case READY_IDLE:
-    if ((ext_key_start_old == 0) && (ext_key_start_new == 1)) {
+    if ((on_board_sw_st_old == 0) && (on_board_sw_st_new == 1)) {
       set_state(COLLECTING_DATA);
     }
     break;
   case COLLECTING_DATA:
-    if (ext_key_start_new == 0) {
+    if (on_board_sw_st_new == 0) {
       set_state(SAVEING_TO_FILE);
     }
     break;
@@ -32,35 +33,189 @@ STATE check_state() {
   default:
     break;
   }
-  ext_key_start_old = ext_key_start_new;
+  on_board_sw_st_old = on_board_sw_st_new;
   return running_state;
 }
 void set_state(STATE _state) {
   running_state = _state;
-  ext_key_start_old = ext_key_start();
+  on_board_sw_st_old = input_sw_on(ON_BOARD_SW);
+  rotary_board_sw_st_old = input_sw_on(ROTARY_BOARD_SW);
+}
+MOTOR_CMD read_motor_cmd() {
+  MOTOR_CMD rtn = NO_CMD;
+  uint8_t rotary_board_sw_st_new = input_sw_on(ROTARY_BOARD_SW);
+  if ((rotary_board_sw_st_old == 0) && (rotary_board_sw_st_new == 1)) {
+    rtn = START;
+  } else if ((rotary_board_sw_st_old == 1) && (rotary_board_sw_st_new == 0)) {
+    rtn = STOP;
+  }
+  rotary_board_sw_st_old = rotary_board_sw_st_new;
+  return rtn;
+}
+uint16_t cal_pwm_timer_counter(uint8_t spd_ctrl) {
+  switch (spd_ctrl) {
+  case 1:   return 63000; //  50RPM
+  case 2:   return 31500; // 100RPM
+  case 3:   return 21000; // 150RPM
+  case 4:   return 15750; // 200RPM
+  case 5:   return 12600; // 250RPM
+  case 6:   return 10500; // 300RPM
+  case 7:   return 9000;  // 350RPM
+  case 8:   return 7875;  // 400RPM
+  case 9:   return 7000;  // 450RPM
+  case 0:
+  default:  return 0;
+  }
+}
+static MOTOR_STATE motor_state_str = COAST;
+static MOTOR_STATE motor_state_ben = COAST;
+static uint8_t motor_str_circle_tartget = 0;
+static uint8_t motor_ben_circle_tartget = 0;
+uint16_t decide_motor_state(uint8_t state_ctrl, uint8_t circle_target_1, uint8_t circle_target_2) {
+  motor_state_str = COAST;
+  motor_state_ben = COAST;
+  motor_str_circle_tartget = 0;
+  motor_ben_circle_tartget = 0;
+  uint8_t circle_target = circle_target_1 * 10 + circle_target_2;
+  switch (state_ctrl) {
+  case 1:
+    motor_state_str = FORWARD;
+    motor_str_circle_tartget = circle_target;
+    break;
+  case 2:
+    motor_state_str = REVERSE;
+    motor_str_circle_tartget = circle_target;
+    break;
+  case 3:
+    motor_state_ben = FORWARD;
+    motor_ben_circle_tartget = circle_target;
+    break;
+  case 4:
+    motor_state_ben = REVERSE;
+    motor_ben_circle_tartget = circle_target;
+    break;
+  case 9:
+    motor_state_ben = BRAKE;
+    motor_state_ben = BRAKE;
+    break;
+  case 0:
+  default:
+    break;
+  }
+}
+static const uint16_t steps_output[4] = {0b1001, 0b0101, 0b0110, 0b1010};
+static int8_t motor_str_forward_step_index = -1;
+static int8_t motor_ben_forward_step_index = -1;
+static int8_t motor_str_reverse_step_index = 4;
+static int8_t motor_ben_reverse_step_index = 4;
+static uint8_t motor_str_step_count = 0;
+static uint8_t motor_ben_step_count = 0;
+static uint8_t motor_str_circle_count = 0;
+static uint8_t motor_ben_circle_count = 0;
+void motor_stop() {
+  motor_state_str = BRAKE;
+  motor_state_ben = BRAKE;
+  motor_str_circle_tartget = 0;
+  motor_ben_circle_tartget = 0;
+  motor_str_forward_step_index = -1;
+  motor_ben_forward_step_index = -1;
+  motor_str_reverse_step_index = 4;
+  motor_ben_reverse_step_index = 4;
+  motor_str_step_count = 0;
+  motor_ben_step_count = 0;
+  motor_str_circle_count = 0;
+  motor_ben_circle_count = 0;
+}
+void generate_pwm() {
+  if (motor_state_str == FORWARD) {
+    motor_str_forward_step_index++;
+    if (motor_str_forward_step_index > 3) {
+      motor_str_forward_step_index = 0;
+      motor_str_step_count++;
+    }
+    uint16_t output = steps_output[motor_str_forward_step_index]; // SET
+    uint16_t output_negtive = ~output & 0x0f;            // RESET
+    uint32_t bsrr = (uint32_t)output_negtive << 16U | output; // PA3-0
+    GPIOA->BSRR = bsrr;
+  } else if (motor_state_str == REVERSE) {
+    motor_str_reverse_step_index--;
+    if (motor_str_reverse_step_index < 0) {
+      motor_str_reverse_step_index = 3;
+      motor_str_step_count++;
+    }
+    uint16_t output = steps_output[motor_str_reverse_step_index]; // SET
+    uint16_t output_negtive = ~output & 0x0f;            // RESET
+    uint32_t bsrr = (uint32_t)output_negtive << 16U | output; // PA3-0
+    GPIOA->BSRR = bsrr;
+  }
+  if (motor_str_step_count == 200) {
+    motor_str_step_count = 0;
+    motor_str_circle_count++;
+    if (motor_str_circle_count == motor_str_circle_tartget) {
+      motor_stop();
+    }
+  }
+  if (motor_state_ben == FORWARD) {
+    motor_ben_forward_step_index++;
+    if (motor_ben_forward_step_index > 3) {
+      motor_ben_forward_step_index = 0;
+    }
+    uint16_t output = steps_output[motor_ben_forward_step_index]; // SET
+    uint16_t output_negtive = ~output & 0x0f;            // RESET
+    uint32_t bsrr = (uint32_t)output_negtive << 22U | output << 6U; // PB9-6
+    GPIOB->BSRR = bsrr;
+  } else if (motor_state_ben == REVERSE) {
+    motor_ben_reverse_step_index--;
+    if (motor_ben_reverse_step_index < 0) {
+      motor_ben_reverse_step_index = 3;
+    }
+    uint16_t output = steps_output[motor_ben_reverse_step_index]; // SET
+    uint16_t output_negtive = ~output & 0x0f;            // RESET
+    uint32_t bsrr = (uint32_t)output_negtive << 22U | output << 6; // PB9-6
+    GPIOB->BSRR = bsrr;
+  }
+  if (motor_ben_step_count == 200) {
+    motor_ben_step_count = 0;
+    motor_ben_circle_count++;
+    if (motor_ben_circle_count == motor_ben_circle_tartget) {
+      motor_stop();
+    }
+  }
 }
 
-uint32_t counterValue = 0, oldCounterValue = 0;
-inline uint32_t get_counter() {
-  return counterValue;
+inline uint16_t read_TIM14_counter() {
+  return TIM14->CNT;
 }
 
-void increase_counter() {
-  counterValue++;
+inline uint16_t reset_TIM14_counter() {
+  return TIM14->CNT = 0;
 }
 
+uint32_t counterValue2ms = 0, oldcounterValue2ms = 0;
+void increase_2ms_counter() {
+  counterValue2ms++;
+}
 uint32_t wait_for_counter_changed() {
-  while(oldCounterValue == counterValue) {
+  while(oldcounterValue2ms == counterValue2ms) {
     write_LEDRED(GPIO_PIN_SET);
   }
-  oldCounterValue = counterValue;
+  oldcounterValue2ms = counterValue2ms;
   write_LEDRED(GPIO_PIN_RESET);
-  return counterValue;
+  return counterValue2ms;
 }
 
-inline GPIO_PinState read_ext_sw() { return HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8); }
+inline GPIO_PinState read_input_sw(INPUT_SW input_sw) {
+  switch (input_sw) {
+  case ON_BOARD_SW:
+    return HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
+  case ROTARY_BOARD_SW:
+    return HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_4);
+  default:
+    return GPIO_PIN_RESET;
+  }
+}
 
-inline uint8_t ext_key_start() { return read_ext_sw() == GPIO_PIN_SET ? 1 : 0; }
+inline uint8_t input_sw_on(INPUT_SW input_sw) { return read_input_sw(input_sw) == GPIO_PIN_SET ? 1 : 0; }
 
 inline void write_LEDGRN(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, state); }
 inline void write_LEDRED(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, state); }
@@ -93,14 +248,6 @@ void increase_250ms_counter() {
     write_LEDRED(GPIO_PIN_SET);
     write_LEDGRN(GPIO_PIN_RESET);
   }
-}
-
-inline uint16_t read_TIM7_counter() {
-  return TIM7->CNT;
-}
-
-inline uint16_t reset_TIM7_counter() {
-  return TIM7->CNT = 0;
 }
 
 void start_ADC(ADC_HandleTypeDef *hadc, uint32_t channel) {

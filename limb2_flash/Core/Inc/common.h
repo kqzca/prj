@@ -36,15 +36,35 @@ typedef enum _STATE
 STATE check_state();
 void set_state(STATE _state);
 
-uint32_t get_counter();
-void increase_counter();
+void increase_2ms_counter();
 uint32_t wait_for_counter_changed();
 void increase_250ms_counter();
-uint16_t read_TIM7_counter();
-uint16_t reset_TIM7_counter();
 
-GPIO_PinState read_ext_sw();
-uint8_t ext_key_start();
+typedef enum _INPUT_SW {
+  ON_BOARD_SW,
+  ROTARY_BOARD_SW
+} INPUT_SW;
+GPIO_PinState read_input_sw(INPUT_SW input_sw);
+uint8_t input_sw_on(INPUT_SW input_sw);
+typedef enum _MOTOR_CMD {
+  NO_CMD,
+  START,
+  STOP
+} MOTOR_CMD;
+typedef enum _MOTOR_STATE {
+  COAST,
+  REVERSE,
+  FORWARD,
+  BRAKE
+} MOTOR_STATE;
+MOTOR_CMD read_motor_cmd();
+uint16_t cal_pwm_timer_counter(uint8_t spd_ctrl);
+uint16_t decide_motor_state(uint8_t state_ctrl, uint8_t circle_target_1, uint8_t circle_target_2);
+void generate_pwm();
+
+uint16_t read_TIM14_counter();
+uint16_t reset_TIM14_counter();
+
 void write_LEDGRN(GPIO_PinState state);
 void write_LEDRED(GPIO_PinState state);
 
