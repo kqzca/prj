@@ -60,6 +60,9 @@ typedef enum _MOTOR_STATE {
 MOTOR_CMD read_motor_cmd();
 uint16_t cal_pwm_timer_counter(uint8_t spd_ctrl);
 uint16_t decide_motor_state(uint8_t state_ctrl, uint8_t circle_target_1, uint8_t circle_target_2);
+void motor_ctrl_str(uint16_t output);
+void motor_ctrl_ben(uint16_t output);
+void motor_stop();
 void generate_pwm();
 
 uint16_t read_TIM14_counter();
@@ -67,6 +70,9 @@ uint16_t reset_TIM14_counter();
 
 void write_LEDGRN(GPIO_PinState state);
 void write_LEDRED(GPIO_PinState state);
+void toggle_LEDGRN();
+void toggle_LEDRED();
+void vm_en(GPIO_PinState state);
 
 void start_ADC(ADC_HandleTypeDef *hadc, uint32_t channel);
 uint16_t read_ADC(ADC_HandleTypeDef *hadc);

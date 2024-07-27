@@ -54,15 +54,15 @@ MOTOR_CMD read_motor_cmd() {
 }
 uint16_t cal_pwm_timer_counter(uint8_t spd_ctrl) {
   switch (spd_ctrl) {
-  case 1:   return 63000; //  50RPM
-  case 2:   return 31500; // 100RPM
-  case 3:   return 21000; // 150RPM
-  case 4:   return 15750; // 200RPM
-  case 5:   return 12600; // 250RPM
-  case 6:   return 10500; // 300RPM
-  case 7:   return 9000;  // 350RPM
-  case 8:   return 7875;  // 400RPM
-  case 9:   return 7000;  // 450RPM
+  case 1:   return 63000; // 100RPM
+  case 2:   return 42000; // 150RPM
+  case 3:   return 21000; // 300RPM
+  case 4:   return 10500; // 600RPM
+  case 5:   return 6300;  // 1000RPM
+  case 6:   return 4200;  // 1500RPM
+  case 7:   return 2100;  // 3000RPM
+  case 8:   return 1050;  // 6000RPM
+  case 9:   return 700;   // 9000RPM
   case 0:
   default:  return 0;
   }
@@ -103,7 +103,7 @@ uint16_t decide_motor_state(uint8_t state_ctrl, uint8_t circle_target_1, uint8_t
     break;
   }
 }
-static const uint16_t steps_output[4] = {0b1001, 0b0101, 0b0110, 0b1010};
+static const uint16_t steps_output[4] = {0b0101, 0b0110, 0b1010, 0b1001};
 static int8_t motor_str_forward_step_index = -1;
 static int8_t motor_ben_forward_step_index = -1;
 static int8_t motor_str_reverse_step_index = 4;
@@ -112,6 +112,16 @@ static uint8_t motor_str_step_count = 0;
 static uint8_t motor_ben_step_count = 0;
 static uint8_t motor_str_circle_count = 0;
 static uint8_t motor_ben_circle_count = 0;
+inline void motor_ctrl_str(uint16_t output) {
+  uint16_t output_negtive = ~output & 0x0f;            // RESET
+  uint32_t bsrr = (uint32_t)output_negtive << 16U | output; // PA3-0
+  GPIOA->BSRR = bsrr;
+}
+inline void motor_ctrl_ben(uint16_t output) {
+  uint16_t output_negtive = ~output & 0x0f;            // RESET
+  uint32_t bsrr = (uint32_t)output_negtive << 22U | output << 6U; // PB9-6
+  GPIOB->BSRR = bsrr;
+}
 void motor_stop() {
   motor_state_str = BRAKE;
   motor_state_ben = BRAKE;
@@ -125,6 +135,10 @@ void motor_stop() {
   motor_ben_step_count = 0;
   motor_str_circle_count = 0;
   motor_ben_circle_count = 0;
+  write_LEDGRN(GPIO_PIN_RESET);
+  write_LEDRED(GPIO_PIN_RESET);
+  motor_ctrl_str(0x0F);
+  motor_ctrl_ben(0x0F);
 }
 void generate_pwm() {
   if (motor_state_str == FORWARD) {
@@ -133,24 +147,21 @@ void generate_pwm() {
       motor_str_forward_step_index = 0;
       motor_str_step_count++;
     }
-    uint16_t output = steps_output[motor_str_forward_step_index]; // SET
-    uint16_t output_negtive = ~output & 0x0f;            // RESET
-    uint32_t bsrr = (uint32_t)output_negtive << 16U | output; // PA3-0
-    GPIOA->BSRR = bsrr;
+    uint16_t output = steps_output[motor_str_forward_step_index];
+    motor_ctrl_str(output);
   } else if (motor_state_str == REVERSE) {
     motor_str_reverse_step_index--;
     if (motor_str_reverse_step_index < 0) {
       motor_str_reverse_step_index = 3;
       motor_str_step_count++;
     }
-    uint16_t output = steps_output[motor_str_reverse_step_index]; // SET
-    uint16_t output_negtive = ~output & 0x0f;            // RESET
-    uint32_t bsrr = (uint32_t)output_negtive << 16U | output; // PA3-0
-    GPIOA->BSRR = bsrr;
+    uint16_t output = steps_output[motor_str_reverse_step_index];
+    motor_ctrl_str(output);
   }
   if (motor_str_step_count == 200) {
     motor_str_step_count = 0;
     motor_str_circle_count++;
+    toggle_LEDRED();
     if (motor_str_circle_count == motor_str_circle_tartget) {
       motor_stop();
     }
@@ -159,24 +170,23 @@ void generate_pwm() {
     motor_ben_forward_step_index++;
     if (motor_ben_forward_step_index > 3) {
       motor_ben_forward_step_index = 0;
+      motor_ben_step_count++;
     }
-    uint16_t output = steps_output[motor_ben_forward_step_index]; // SET
-    uint16_t output_negtive = ~output & 0x0f;            // RESET
-    uint32_t bsrr = (uint32_t)output_negtive << 22U | output << 6U; // PB9-6
-    GPIOB->BSRR = bsrr;
+    uint16_t output = steps_output[motor_ben_forward_step_index];
+    motor_ctrl_ben(output);
   } else if (motor_state_ben == REVERSE) {
     motor_ben_reverse_step_index--;
     if (motor_ben_reverse_step_index < 0) {
       motor_ben_reverse_step_index = 3;
+      motor_ben_step_count++;
     }
     uint16_t output = steps_output[motor_ben_reverse_step_index]; // SET
-    uint16_t output_negtive = ~output & 0x0f;            // RESET
-    uint32_t bsrr = (uint32_t)output_negtive << 22U | output << 6; // PB9-6
-    GPIOB->BSRR = bsrr;
+    motor_ctrl_ben(output);
   }
   if (motor_ben_step_count == 200) {
     motor_ben_step_count = 0;
     motor_ben_circle_count++;
+    toggle_LEDRED();
     if (motor_ben_circle_count == motor_ben_circle_tartget) {
       motor_stop();
     }
@@ -219,6 +229,9 @@ inline uint8_t input_sw_on(INPUT_SW input_sw) { return read_input_sw(input_sw) =
 
 inline void write_LEDGRN(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, state); }
 inline void write_LEDRED(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, state); }
+inline void toggle_LEDGRN() { HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_6); }
+inline void toggle_LEDRED() { HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_7); }
+inline void vm_en(GPIO_PinState state) { HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, state); };
 
 void increase_250ms_counter() {
   static uint32_t counter_250ms = 0;
@@ -236,17 +249,13 @@ void increase_250ms_counter() {
     write_LEDRED(GPIO_PIN_RESET);
     write_LEDGRN(((counter_250ms & 0x04) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
     break;
-  case MOTOR_TEST:
-    write_LEDRED(((counter_250ms & 0x04) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
-    write_LEDGRN(GPIO_PIN_RESET);
-    break;
   case NOT_READY:
     write_LEDRED(GPIO_PIN_RESET);
     write_LEDGRN(((counter_250ms & 0x01) != 0) ? GPIO_PIN_RESET : GPIO_PIN_SET);
     break;
+  case MOTOR_TEST:
   default:
-    write_LEDRED(GPIO_PIN_SET);
-    write_LEDGRN(GPIO_PIN_RESET);
+    break;
   }
 }
 
