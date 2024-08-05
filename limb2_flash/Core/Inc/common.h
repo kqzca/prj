@@ -55,7 +55,7 @@ typedef enum _MOTOR_STATE {
   COAST,
   REVERSE,
   FORWARD,
-  BRAKE
+  HOLD
 } MOTOR_STATE;
 MOTOR_CMD read_motor_cmd();
 uint16_t cal_pwm_timer_counter(uint8_t spd_ctrl);

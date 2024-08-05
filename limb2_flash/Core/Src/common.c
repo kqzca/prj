@@ -54,6 +54,7 @@ MOTOR_CMD read_motor_cmd() {
 }
 uint16_t cal_pwm_timer_counter(uint8_t spd_ctrl) {
   switch (spd_ctrl) {
+  /*
   case 1:   return 63000; // 100RPM
   case 2:   return 42000; // 150RPM
   case 3:   return 21000; // 300RPM
@@ -63,6 +64,16 @@ uint16_t cal_pwm_timer_counter(uint8_t spd_ctrl) {
   case 7:   return 2100;  // 3000RPM
   case 8:   return 1050;  // 6000RPM
   case 9:   return 700;   // 9000RPM
+  */
+  case 1:   return 63000; // 25RPM
+  case 2:   return 32000; // 50RPM
+  case 3:   return 21000; // 75RPM
+  case 4:   return 15750; // 100RPM
+  case 5:   return 12600; // 125RPM
+  case 6:   return 10500; // 150RPM
+  case 7:   return 9000;  // 175RPM
+  case 8:   return 7875;  // 200RPM
+  case 9:   return 7000;  // 225RPM
   case 0:
   default:  return 0;
   }
@@ -87,16 +98,18 @@ uint16_t decide_motor_state(uint8_t state_ctrl, uint8_t circle_target_1, uint8_t
     motor_str_circle_tartget = circle_target;
     break;
   case 3:
+    motor_state_str = HOLD;
+    break;
+  case 4:
     motor_state_ben = FORWARD;
     motor_ben_circle_tartget = circle_target;
     break;
-  case 4:
+  case 5:
     motor_state_ben = REVERSE;
     motor_ben_circle_tartget = circle_target;
     break;
-  case 9:
-    motor_state_ben = BRAKE;
-    motor_state_ben = BRAKE;
+  case 6:
+    motor_state_ben = HOLD;
     break;
   case 0:
   default:
@@ -123,8 +136,8 @@ inline void motor_ctrl_ben(uint16_t output) {
   GPIOB->BSRR = bsrr;
 }
 void motor_stop() {
-  motor_state_str = BRAKE;
-  motor_state_ben = BRAKE;
+  motor_state_str = COAST;
+  motor_state_ben = COAST;
   motor_str_circle_tartget = 0;
   motor_ben_circle_tartget = 0;
   motor_str_forward_step_index = -1;
@@ -137,8 +150,8 @@ void motor_stop() {
   motor_ben_circle_count = 0;
   write_LEDGRN(GPIO_PIN_RESET);
   write_LEDRED(GPIO_PIN_RESET);
-  motor_ctrl_str(0x0F);
-  motor_ctrl_ben(0x0F);
+  motor_ctrl_str(0x00);
+  motor_ctrl_ben(0x00);
 }
 void generate_pwm() {
   if (motor_state_str == FORWARD) {
@@ -156,6 +169,9 @@ void generate_pwm() {
       motor_str_step_count++;
     }
     uint16_t output = steps_output[motor_str_reverse_step_index];
+    motor_ctrl_str(output);
+  } else if (motor_state_str == HOLD) {
+    uint16_t output = steps_output[0];
     motor_ctrl_str(output);
   }
   if (motor_str_step_count == 200) {
@@ -180,7 +196,10 @@ void generate_pwm() {
       motor_ben_reverse_step_index = 3;
       motor_ben_step_count++;
     }
-    uint16_t output = steps_output[motor_ben_reverse_step_index]; // SET
+    uint16_t output = steps_output[motor_ben_reverse_step_index];
+    motor_ctrl_ben(output);
+  } else if (motor_state_ben == HOLD) {
+    uint16_t output = steps_output[0];
     motor_ctrl_ben(output);
   }
   if (motor_ben_step_count == 200) {

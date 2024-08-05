@@ -282,8 +282,8 @@ int main(void)
           uint16_t pwm_timer_counter = cal_pwm_timer_counter(motor_ctrl_input[0] & 0x0F);
           __HAL_TIM_SET_AUTORELOAD(&htim14, pwm_timer_counter - 1);
           decide_motor_state((motor_ctrl_input[0] & 0xF0) >> 4, (motor_ctrl_input[1] & 0xF0) >> 4, (motor_ctrl_input[1] & 0x0F));
-          motor_ctrl_str(GPIO_PIN_RESET);
-          motor_ctrl_ben(GPIO_PIN_RESET);
+          motor_ctrl_str(0);
+          motor_ctrl_ben(0);
           HAL_TIM_Base_Start_IT(&htim14);
         }
         if (tca9534Read(&hi2c2, &bufReadDiExp) == HAL_OK) {
@@ -735,7 +735,7 @@ static void MX_TIM14_Init(void)
 
   /* USER CODE END TIM14_Init 1 */
   htim14.Instance = TIM14;
-  htim14.Init.Prescaler = 0;
+  htim14.Init.Prescaler = 3;
   htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim14.Init.Period = 10499;
   htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
