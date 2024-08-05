@@ -1,0 +1,39 @@
+How to do motor test using limb_flash code:
+
+1. Connect steps motors and rotary switch board
+2. Power up, limb_flash code is in stop mode, user can use:
+   3.1 SW3 to select test mode
+       0 - Not used
+       1 - STR Forward
+       2 - STR Backward
+       3 - STR Hold
+       4 - BEN Forward
+       5 - BEN Backward
+       6 - BEN Hold
+       7 - Not used
+       8 - Not used
+       9 - Not used
+   3.2 SW5 to select speed (RPM)
+       1 - 25
+       2 - 50
+       3 - 75
+       4 - 100
+       5 - 125
+       6 - 150
+       7 - 175
+       8 - 200
+       9 - 225
+       0 - Not used
+   3.3 SW2/SW4 to select rotations to run, SW2 for tens digit, SW4 for ones digit. Examples:
+       SW2 - 0, SW4 - 8: 8 rotations
+       SW2 - 2, SW4 - 5: 25 rotations
+4. Move SW1 from LOW to HIGH gets limb_flash code into start mode.
+   Selected mode/speed/rotations will be executed.
+   After selected rotations, motor will stop, no holding.
+5. Move SW1 from HIGH to LOW will stop the motr immediately, gets limb_flash code into stop mode
+
+Notes:
+1. "Hold" mode has no speed/rotation selections.
+2. With current board config, Motor driving voltage VM is 6.5V ~ 6.6 V (no load)
+   Selected motor (14H030H-0304) can only run at 125 or 150 RPM highest.
+   Increase VM (by decrease R21 or increase R18), will increase highest RPM.
